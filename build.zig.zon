@@ -1,0 +1,17 @@
+.{
+    .name = .pba,
+    .version = "0.0.1",
+    .dependencies = .{
+        .httpz = .{
+            .url = "git+https://github.com/karlseguin/http.zig.git#9b14af98fde5e98abb9a8376fe02b42003e835bf",
+            .hash = "httpz-0.0.0-PNVzrMgTCQDhzfBLRRebTx9LU056Ph2erdN9-42rFbhj",
+        },
+        .pg = .{
+            .url = "git+https://github.com/karlseguin/pg.zig.git#2e08f9817aacff1ad93531ec182ee9cc69f5bda5",
+            .hash = "pg-0.0.0-Wp_7gTEVBwB8CsFe-rh8enfPHKrfA3oapKLIRoPbKUDx",
+        },
+    },
+    .minimum_zig_version = "0.16.0",
+    .paths = .{""},
+    .fingerprint = 0xc6cee9a9078aa79f,
+}

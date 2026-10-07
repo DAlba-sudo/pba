@@ -1,0 +1,55 @@
+var pool: ?*pg.Pool = null;
+
+var io: std.Io = undefined;
+var allocator: std.mem.Allocator = undefined;
+
+pub fn main(init: process.Init) !void {
+    io = init.io;
+    allocator = init.gpa;
+
+    var configuration = config.Configuration{};
+    try configuration.load(init.environ_map);
+    try init_database(configuration);
+    defer {
+        if (pool) |p| {
+            p.deinit();
+        }
+    }
+}
+
+// takes an already initialized configuration and reads it's values
+// so it can setup the postgres pool.
+fn init_database(c: config.Configuration) !void {
+    if (c.Database) |db| {
+        pool = pg.Pool.init(io, allocator, .{
+            .size = db.Pool.size,
+            .timeout = db.Pool.timeout,
+            .auth = .{
+                .username = db.User,
+                .password = db.Password,
+                .database = db.Database,
+            },
+            .connect = .{
+                .host = db.Host,
+                .port = db.Port,
+            },
+        }) catch |err| {
+            std.log.err("failed to initialize database with given information, proceeding without database (err: {s})", .{@errorName(err)});
+            return;
+        };
+        const _pool = pool.?;
+
+        std.log.info("successfully connected to the database", .{});
+        errdefer _pool.deinit();
+
+        _ = try _pool.exec(internal.types.Account.DEF, .{});
+        _ = try _pool.exec(internal.types.Operation.DEF, .{});
+    }
+}
+
+const std = @import("std");
+const process = std.process;
+const config = @import("config.zig");
+const httpz = @import("httpz");
+const pg = @import("pg");
+const internal = @import("internal");
