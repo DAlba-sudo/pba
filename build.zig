@@ -4,13 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Private Modules
-    const mod_internal = b.createModule(.{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("./internal/root.zig"),
-    });
-
     // Dependencies
     const httpz = b.dependency("httpz", .{
         .target = target,
@@ -22,6 +15,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Private Modules
+    const mod_internal = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("./internal/root.zig"),
+        .imports = &.{
+            .{ .name = "httpz", .module = httpz.module("httpz") },
+            .{ .name = "pg", .module = pg.module("pg") },
+        },
+    });
+
+    // Executable
     const exe = b.addExecutable(.{
         .name = "server",
         .root_module = b.createModule(.{
