@@ -1,6 +1,7 @@
 const httpz = @import("httpz");
 const pg = @import("pg");
 const types = @import("../types/root.zig");
+const analysis = @import("../analysis/root.zig");
 const std = @import("std");
 const json = std.json;
 const time = @import("../time/root.zig");
@@ -141,6 +142,25 @@ pub const api = struct {
         const operations = try types.Operation.search_by_title(p, req.arena, title.string.?, limit.int.?, pointer.int.?);
         res.setStatus(.ok);
         try res.json(operations, .{});
+    }
+
+    pub fn total_money_as_of(root: App, req: *httpz.Request, res: *httpz.Response) !void {
+        const map = try req.formData();
+
+        const account_id = try Contract(map, "account_id", .{ .int = null });
+        const date = try Contract(map, "date", .{ .string = null });
+
+        const timestamp = try time.parseIsoDateToTimestamp(date.string.?);
+
+        const sum = analysis.total_money_as_of(root.p.?, req.arena, timestamp, account_id.int.?) catch |err| {
+            std.log.err("failed to calculate total money as of now (err: {s})", .{@errorName(err)});
+            return err;
+        };
+
+        return res.json(.{ .total = sum }, .{}) catch |err| {
+            std.log.err("failed to write total money as of now (err: {s})", .{@errorName(err)});
+            return err;
+        };
     }
 };
 

@@ -35,6 +35,7 @@ pub fn main(init: process.Init) !void {
     router.post("/api/operation", internal.routes.api.create_operation, .{});
     router.delete("/api/operation", internal.routes.api.delete_operation, .{});
     router.get("/api/search/operations", internal.routes.api.search_operations_by_title, .{});
+    router.post("/api/account/money", internal.routes.api.total_money_as_of, .{});
 
     try server.listen();
 }

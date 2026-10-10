@@ -39,15 +39,15 @@ pub const Account = struct {
     pub fn get_by_id(p: *pg.Pool, allocator: std.mem.Allocator, id: i32) Errors!?Account {
         const query =
             \\ SELECT id, created_at, updated_at, deleted_at, initial_balance, name FROM
-            \\ acount WHERE id = $1 AND deleted_at IS NULL;
+            \\ account WHERE id = $1 AND deleted_at IS NULL;
         ;
 
-        const row = p.rowOpts(query, .{id}, .{ .column_names = true }) catch |err| {
+        var row = p.rowOpts(query, .{id}, .{ .column_names = true }) catch |err| {
             std.log.err("failed to get account with id {d} (err: {s})", .{ id, @errorName(err) });
             return Errors.AccountRetrievalFailure;
         };
         if (row) |r| {
-            defer r.deinit();
+            defer row.?.deinit() catch {};
             return r.to(Account, .{
                 .dupe = true,
                 .allocator = allocator,
@@ -259,6 +259,39 @@ pub const Operation = struct {
         _ = p.exec(query, .{id}) catch |err| {
             std.log.err("failed to delete operation with id {d} (err: {s})", .{ id, @errorName(err) });
             return Errors.OperationDeletionFailure;
+        };
+    }
+
+    pub fn get_by_account(p: *pg.Pool, allocator: std.mem.Allocator, account_id: i32) Errors![]Operation {
+        const query =
+            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
+            \\ operation WHERE account_id = $1 AND deleted_at IS NULL ORDER BY id ASC;
+        ;
+
+        var rows = p.queryOpts(query, .{account_id}, .{
+            .column_names = true,
+        }) catch |err| {
+            std.log.err("failed to get operations by account with id {d} (err: {s})", .{ account_id, @errorName(err) });
+            return Errors.OperationRetrievalFailure;
+        };
+        defer rows.deinit();
+
+        var list: std.ArrayList(Operation) = .empty;
+        const mapper = rows.mapper(Operation, .{ .allocator = allocator });
+
+        while (mapper.next() catch |err| {
+            std.log.err("failed to map the row search result to an operation (err: {s})", .{@errorName(err)});
+            return Errors.OperationRetrievalFailure;
+        }) |op| {
+            list.append(allocator, op) catch |err| {
+                std.log.err("failed to append row search result to list (err: {s})", .{@errorName(err)});
+                return Errors.OperationRetrievalFailure;
+            };
+        }
+
+        return list.toOwnedSlice(allocator) catch |err| {
+            std.log.err("failed to convert list to owned slice (err: {s})", .{@errorName(err)});
+            return Errors.OperationRetrievalFailure;
         };
     }
 };
