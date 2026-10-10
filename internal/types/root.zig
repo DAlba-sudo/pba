@@ -32,7 +32,7 @@ pub const Account = struct {
     created_at: i64,
     updated_at: i64,
     deleted_at: ?i64,
-    initial_balance: ?f32,
+    initial_balance: ?f64,
     name: []const u8,
 
     // Get
@@ -95,19 +95,19 @@ pub const Account = struct {
     }
 
     // Create
-    pub fn create(p: *pg.Pool, allocator: std.mem.Allocator, name: []const u8, initial_balance: f32, comment: ?[]const u8) Errors!Account {
+    pub fn create(p: *pg.Pool, allocator: std.mem.Allocator, name: []const u8, initial_balance: f32) Errors!Account {
         const query =
             \\ INSERT INTO account (name, initial_balance) VALUES ($1, $2)
             \\ RETURNING id, created_at, updated_at, deleted_at, initial_balance, name;
         ;
 
-        const row = p.row(query, .{ name, initial_balance, comment }) catch |err| {
+        var row = p.row(query, .{ name, initial_balance }) catch |err| {
             std.log.err("failed to create account with name '{s}', and initial balance of ${d} (err: {s})", .{ name, initial_balance, @errorName(err) });
             return Errors.AccountCreationFailure;
         };
         if (row) |r| {
-            defer r.deinit();
-            r.to(Account, .{
+            defer row.?.deinit() catch {};
+            return r.to(Account, .{
                 .dupe = true,
                 .allocator = allocator,
             }) catch |err| {
@@ -115,6 +115,8 @@ pub const Account = struct {
                 return Errors.AccountCreationFailure;
             };
         }
+
+        return Errors.AccountCreationFailure;
     }
 
     // Delete
@@ -158,7 +160,7 @@ pub const Operation = struct {
     created_at: i64,
     updated_at: i64,
     deleted_at: ?i64,
-    value: f32,
+    value: f64,
     date: i64,
     title: []const u8,
     comment: ?[]const u8,
@@ -190,7 +192,7 @@ pub const Operation = struct {
     }
 
     // Search
-    pub fn search_by_title(p: *pg.Pool, allocator: std.mem.Allocator, title: []const u8, limit: u32, page: i32) Errors![]Operation {
+    pub fn search_by_title(p: *pg.Pool, allocator: std.mem.Allocator, title: []const u8, limit: i32, page: i32) Errors![]Operation {
         const query =
             \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
             \\ operation WHERE title ILIKE '%' || $1 ::text || '%' AND deleted_at IS NULL ORDER BY id ASC LIMIT $2 OFFSET $3
@@ -230,12 +232,12 @@ pub const Operation = struct {
             \\ RETURNING id, created_at, updated_at, deleted_at, value, date, title, comment, account_id;
         ;
 
-        const row = p.row(query, .{ value, date, title, comment, account_id }) catch |err| {
+        var row = p.row(query, .{ value, date, title, comment, account_id }) catch |err| {
             std.log.err("failed to create operation with title '{s}', and value of ${d} (err: {s})", .{ title, value, @errorName(err) });
             return Errors.OperationCreationFailure;
         };
         if (row) |r| {
-            defer r.deinit();
+            defer row.?.deinit() catch {};
             return r.to(Operation, .{
                 .dupe = true,
                 .allocator = allocator,
@@ -244,6 +246,8 @@ pub const Operation = struct {
                 return Errors.OperationCreationFailure;
             };
         }
+
+        return Errors.OperationCreationFailure;
     }
 
     // Delete

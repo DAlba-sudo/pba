@@ -15,6 +15,28 @@ pub fn main(init: process.Init) !void {
             p.deinit();
         }
     }
+
+    var server = try internal.routes.Server.init(io, allocator, .{
+        .address = configuration.Server.InterfaceFunc(configuration.Server.Port),
+        .request = .{
+            .max_form_count = 16,
+        },
+    }, internal.routes.App{
+        .p = pool,
+    });
+    defer server.deinit();
+    defer server.stop();
+
+    var router = try server.router(.{});
+
+    router.get("/health", internal.routes.health, .{});
+    router.post("/api/account", internal.routes.api.create_account, .{});
+    router.delete("/api/account", internal.routes.api.delete_account, .{});
+    router.post("/api/operation", internal.routes.api.create_operation, .{});
+    router.delete("/api/operation", internal.routes.api.delete_operation, .{});
+    router.get("/api/search/operations", internal.routes.api.search_operations_by_title, .{});
+
+    try server.listen();
 }
 
 // takes an already initialized configuration and reads it's values
