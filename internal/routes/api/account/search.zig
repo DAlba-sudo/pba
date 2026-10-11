@@ -19,39 +19,18 @@ pub fn search(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void
     const name = try routes.Contract(map, "name", .{ .string = "" });
     const initial_balance = try routes.Contract(map, "initial_balance", .{ .float = 0.00 });
 
-    // Parameter Order:
-    // - name
-    // - initial_balance
-    const query =
-        \\ SELECT id, created_at, updated_at, deleted_at, initial_balance, name FROM
-        \\  account WHERE ($1 ::text = '' OR name ILIKE '%' || $1 ::text || '%')
-        \\  AND ($2 ::float8 = 0.00 OR initial_balance = $2)
-        \\  AND deleted_at IS NULL
-    ;
-
-    const rows = try p.queryOpts(query, .{
-        name.string,
-        initial_balance.float,
-    }, .{ .column_names = true });
-    defer rows.deinit();
-
-    var list: std.ArrayList(types.Account) = .empty;
-    var mapper = rows.mapper(types.Account, .{
-        .dupe = true,
-        .allocator = res.arena,
+    const accounts = try types.Account.search(p, res.arena, .{
+        .name = name.string.?,
+        .initial_balance = initial_balance.float.?,
     });
-    while (try mapper.next()) |acc| {
-        try list.append(req.arena, acc);
-    }
 
     res.setStatus(.ok);
-    try res.json(list.items, .{});
+    try res.json(accounts, .{});
 }
 
 const routes = @import("../../root.zig");
 const types = @import("../../../types/root.zig");
 
 const std = @import("std");
-const json = std.json;
 
 const httpz = @import("httpz");
