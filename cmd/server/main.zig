@@ -30,8 +30,12 @@ pub fn main(init: process.Init) !void {
     var router = try server.router(.{});
 
     router.get("/health", internal.routes.health, .{});
+
     router.post("/api/account", api.Account.Create, .{});
     router.delete("/api/account", api.Account.Delete, .{});
+    router.get("/api/account/search", api.Account.Search, .{});
+    router.get("/api/account/:id", api.Account.GetId, .{});
+
     router.post("/api/operation", api.Operation.Create, .{});
     router.delete("/api/operation", api.Operation.Delete, .{});
     router.get("/api/operation/search", api.Operation.Search, .{});

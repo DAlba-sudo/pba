@@ -15,11 +15,8 @@ pub fn create(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void
     const amount = try routes.Contract(map, "amount", .{ .float = null });
     const title = try routes.Contract(map, "title", .{ .string = null });
     const comment = try routes.Contract(map, "comment", .{ .string = "" });
-
-    // TODO: Fix the date shenanigans here.
     const date = try routes.Contract(map, "date", .{ .string = null });
-    _ = date;
-    const date_as_int: i32 = -1;
+    const date_as_int: i32 = try time.parseHtmlDateToPgDate(date.string.?);
 
     const created_operation = types.Operation.create(
         p,

@@ -1,0 +1,15 @@
+meta {
+  name: Get Account
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/account/:id
+  body: none
+  auth: none
+}
+
+params:path {
+  id: 1
+}

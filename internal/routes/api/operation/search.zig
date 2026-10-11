@@ -23,8 +23,10 @@ pub fn search(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void
     const date = try routes.Contract(map, "date", .{ .string = "" });
     const account_id = try routes.Contract(map, "account_id", .{ .int = -1 });
 
-    // TODO: add functionality for parsing time.
-    const date_as_int: i32 = -1;
+    var date_as_int: i32 = -1;
+    if (date.string.?.len > 0) {
+        date_as_int = try time.parseHtmlDateToPgDate(date.string.?);
+    }
 
     // Parameter Order:
     // - title
@@ -34,7 +36,8 @@ pub fn search(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void
     // - account_id
     const query =
         \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
-        \\  operation WHERE ($1 ::text = '' OR title ILIKE '%' || $1 ::text || '%')
+        \\  operation WHERE deleted_at IS NULL
+        \\  AND ($1 ::text = '' OR title ILIKE '%' || $1 ::text || '%')
         \\  AND ($2 ::text = '' OR comment ILIKE '%' || $2 ::text || '%')
         \\  AND ($3 ::text = '' OR date = $4 )
         \\  AND ($5 ::int = -1 OR account_id = $5)
@@ -64,6 +67,7 @@ pub fn search(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void
 
 const routes = @import("../../root.zig");
 const types = @import("../../../types/root.zig");
+const time = @import("../../../time/root.zig");
 
 const std = @import("std");
 const json = std.json;

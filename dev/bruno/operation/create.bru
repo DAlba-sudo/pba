@@ -1,0 +1,19 @@
+meta {
+  name: Create Operation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/operation
+  body: none
+  auth: none
+}
+
+params:query {
+  account_id: 1
+  amount: -12.5
+  title: Coffee
+  comment: 
+  date: 2026-10-11
+}

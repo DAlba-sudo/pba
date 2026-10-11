@@ -1,0 +1,18 @@
+meta {
+  name: Search Operations
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/operation/search
+  body: none
+  auth: none
+}
+
+params:query {
+  ~title: 
+  ~comment: 
+  ~date: 
+  ~account_id: 1
+}
