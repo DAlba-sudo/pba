@@ -1,0 +1,19 @@
+meta {
+  name: Create Operation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/operation
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  account_id: 1
+  amount: -12.43
+  title: Coffee
+  comment: Daily Work Java
+  date: 2026-10-08
+}

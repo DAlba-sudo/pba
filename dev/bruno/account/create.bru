@@ -1,0 +1,16 @@
+meta {
+  name: Create Account
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/account
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  name: Savings
+  initial_balance: 103.00
+}

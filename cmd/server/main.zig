@@ -15,6 +15,34 @@ pub fn main(init: process.Init) !void {
             p.deinit();
         }
     }
+
+    var server = try internal.routes.Server.init(io, allocator, .{
+        .address = configuration.Server.InterfaceFunc(configuration.Server.Port),
+        .request = .{
+            .max_form_count = 16,
+        },
+    }, internal.routes.App{
+        .p = pool,
+    });
+    defer server.deinit();
+    defer server.stop();
+
+    var router = try server.router(.{});
+
+    router.get("/health", internal.routes.health, .{});
+
+    router.post("/api/account", api.Account.Create, .{});
+    router.delete("/api/account", api.Account.Delete, .{});
+    router.get("/api/account/search", api.Account.Search, .{});
+    router.get("/api/account/:id", api.Account.GetId, .{});
+
+    router.post("/api/operation", api.Operation.Create, .{});
+    router.delete("/api/operation", api.Operation.Delete, .{});
+    router.get("/api/operation/search", api.Operation.Search, .{});
+
+    router.get("/api/money/total", api.Money.Total, .{});
+
+    try server.listen();
 }
 
 // takes an already initialized configuration and reads it's values
@@ -52,4 +80,7 @@ const process = std.process;
 const config = @import("config.zig");
 const httpz = @import("httpz");
 const pg = @import("pg");
+
 const internal = @import("internal");
+const routes = internal.routes;
+const api = routes.api;

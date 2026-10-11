@@ -1,0 +1,16 @@
+meta {
+  name: Search Accounts
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/account/search
+  body: none
+  auth: none
+}
+
+params:query {
+  ~name: 
+  ~initial_balance: 
+}

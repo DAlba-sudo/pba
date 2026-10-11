@@ -16,6 +16,7 @@ pub const Configuration = struct {
             size: u16 = 10,
             timeout: u32 = 10 * std.time.ms_per_s,
         } = .{},
+        TLS: ?bool = null,
     } = null,
 
     pub fn load(self: *@This(), environ_map: *std.process.Environ.Map) !void {
@@ -41,6 +42,7 @@ pub const Configuration = struct {
         const host = environ_map.get("PBA_DATABASE_HOST");
         const port = environ_map.get("PBA_DATABASE_PORT");
         const database = environ_map.get("PBA_DATABASE_DATABASE");
+        const tls = environ_map.get("PBA_DATABASE_TLS");
         if ((user != null and password != null and host != null and port != null and database != null)) {
             self.Database = .{
                 .User = user.?,
@@ -59,6 +61,7 @@ pub const Configuration = struct {
                         break :blk 10;
                     } * std.time.ms_per_s,
                 },
+                .TLS = std.mem.eql(u8, tls orelse "", "true"),
             };
         }
 
