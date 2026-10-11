@@ -23,6 +23,7 @@ pub fn main(init: process.Init) !void {
         },
     }, internal.routes.App{
         .p = pool,
+        .io = io,
     });
     defer server.deinit();
     defer server.stop();
@@ -41,6 +42,21 @@ pub fn main(init: process.Init) !void {
     router.get("/api/operation/search", api.Operation.Search, .{});
 
     router.get("/api/money/total", api.Money.Total, .{});
+
+    // HTMX UI: `/` is the only full page; `/ui/*` answer fragments.
+    router.get("/", web.handlers_cards.index, .{});
+    router.get("/ui/accounts/page", web.handlers_cards.accountsPage, .{});
+    router.get("/ui/cards/:id", web.handlers_cards.card, .{});
+    router.get("/ui/cards/:id/ops", web.handlers_cards.cardOps, .{});
+    router.delete("/ui/operations/:id", web.delete_handlers.operationDelete, .{});
+    router.delete("/ui/accounts/:id", web.delete_handlers.accountDelete, .{});
+    router.get("/ui/accounts/new", web.account_forms.accountNew, .{});
+    router.post("/ui/accounts", web.account_forms.accountCreate, .{});
+    router.get("/ui/modal/close", web.account_forms.modalClose, .{});
+    router.get("/ui/operations/new", web.operation_forms.operationNew, .{});
+    router.post("/ui/operations", web.operation_forms.operationCreate, .{});
+    router.get(web.static.htmx_path, web.static.htmxJs, .{});
+    router.get(web.static.css_path, web.static.appCss, .{});
 
     try server.listen();
 }
@@ -84,3 +100,4 @@ const pg = @import("pg");
 const internal = @import("internal");
 const routes = internal.routes;
 const api = routes.api;
+const web = internal.web;
