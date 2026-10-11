@@ -15,6 +15,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // zmpl: absolute templates path keeps the build independent of the cwd.
+    const zmpl = b.dependency("zmpl", .{
+        .target = target,
+        .optimize = optimize,
+        .zmpl_templates_paths = @as([]const []const u8, &.{
+            b.fmt("prefix=html,path={s}", .{b.pathFromRoot("html")}),
+        }),
+    });
+
+    const web_static = b.createModule(.{ .root_source_file = b.path("html/static/assets.zig") });
+
     // Private Modules
     const mod_internal = b.createModule(.{
         .target = target,
@@ -23,6 +34,8 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "httpz", .module = httpz.module("httpz") },
             .{ .name = "pg", .module = pg.module("pg") },
+            .{ .name = "zmpl", .module = zmpl.module("zmpl") },
+            .{ .name = "web_static", .module = web_static },
         },
     });
 
@@ -42,4 +55,9 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(exe);
+
+    // Tests
+    const tests = b.addTest(.{ .root_module = mod_internal });
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&b.addRunArtifact(tests).step);
 }
