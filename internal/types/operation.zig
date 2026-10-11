@@ -39,12 +39,12 @@ pub const Operation = struct {
             \\ operation WHERE id = $1 AND deleted_at IS NULL;
         ;
 
-        const row = p.rowOpts(query, .{id}, .{ .column_names = true }) catch |err| {
+        var row = p.rowOpts(query, .{id}, .{ .column_names = true }) catch |err| {
             std.log.err("failed to get operation with id {d} (err: {s})", .{ id, @errorName(err) });
             return Errors.OperationRetrievalFailure;
         };
         if (row) |r| {
-            defer r.deinit();
+            defer row.?.deinit() catch {};
             return r.to(Operation, .{
                 .dupe = true,
                 .allocator = allocator,

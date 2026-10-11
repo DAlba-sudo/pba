@@ -8,9 +8,17 @@ const render = @import("render.zig");
 const cards = @import("handlers_cards.zig");
 
 /// DELETE /ui/operations/:id : re-renders its account's card (first page, `oq` kept).
-/// BLOCKED: needs `Operation.get_by_id` to compile (phase-1 boundary change requested).
-pub fn operationDelete(_: App, _: *httpz.Request, res: *httpz.Response) !void {
-    res.setStatus(.not_implemented);
+pub fn operationDelete(app: App, req: *httpz.Request, res: *httpz.Response) !void {
+    const p = app.p orelse return cards.noDatabase(res);
+    const id = cards.pathId(req) orelse return notFound(res, "Operation");
+    const f = cards.filtersFrom(app, req) catch |err| return cards.fail(res, "parse filters", err);
+    const oq = cards.cardQuery(req) catch |err| return cards.fail(res, "parse query", err);
+
+    const op = types.Operation.get_by_id(p, res.arena, id) catch |err| return cards.fail(res, "get operation", err);
+    const account_id = (op orelse return notFound(res, "Operation")).account_id;
+    const deleted = types.Operation.delete_live(p, id) catch |err| return cards.fail(res, "delete operation", err);
+    if (!deleted) return notFound(res, "Operation");
+    cards.renderCardFragment(app, res, account_id, f, oq);
 }
 
 /// DELETE /ui/accounts/:id : the `/` fragment after deletion. A filter on the
