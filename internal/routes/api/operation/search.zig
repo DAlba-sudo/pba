@@ -23,46 +23,16 @@ pub fn search(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void
     const date = try routes.Contract(map, "date", .{ .string = "" });
     const account_id = try routes.Contract(map, "account_id", .{ .int = -1 });
 
-    var date_as_int: i32 = -1;
-    if (date.string.?.len > 0) {
-        date_as_int = try time.parseHtmlDateToPgDate(date.string.?);
-    }
-
-    // Parameter Order:
-    // - title
-    // - comment
-    // - date (text)
-    // - date (cast)
-    // - account_id
-    const query =
-        \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
-        \\  operation WHERE deleted_at IS NULL
-        \\  AND ($1 ::text = '' OR title ILIKE '%' || $1 ::text || '%')
-        \\  AND ($2 ::text = '' OR comment ILIKE '%' || $2 ::text || '%')
-        \\  AND ($3 ::text = '' OR date = $4 )
-        \\  AND ($5 ::int = -1 OR account_id = $5)
-    ;
-
-    const rows = try p.queryOpts(query, .{
-        title.string,
-        comment.string,
-        date.string,
-        date_as_int,
-        account_id.int,
-    }, .{ .column_names = true });
-    defer rows.deinit();
-
-    var list: std.ArrayList(types.Operation) = .empty;
-    var mapper = rows.mapper(types.Operation, .{
-        .dupe = true,
-        .allocator = res.arena,
+    const date_str = date.string.?;
+    const operations = try types.Operation.search(p, res.arena, .{
+        .title = title.string.?,
+        .comment = comment.string.?,
+        .date = if (date_str.len > 0) try time.parseHtmlDateToPgDate(date_str) else null,
+        .account_id = if (account_id.int.? == -1) null else account_id.int.?,
     });
-    while (try mapper.next()) |op| {
-        try list.append(req.arena, op);
-    }
 
     res.setStatus(.ok);
-    try res.json(list.items, .{});
+    try res.json(operations, .{});
 }
 
 const routes = @import("../../root.zig");
@@ -70,6 +40,5 @@ const types = @import("../../../types/root.zig");
 const time = @import("../../../time/root.zig");
 
 const std = @import("std");
-const json = std.json;
 
 const httpz = @import("httpz");
