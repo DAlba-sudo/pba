@@ -12,7 +12,7 @@
 <div id="flash" role="status" aria-live="polite"></div>
 {{zmpl.content}}
 <aside id="drawer" role="dialog" aria-modal="true">
-<div id="drawer-backdrop" hx-get="/ui/modal/close" hx-trigger="click, keyup[key=='Escape' && document.querySelector('#drawer-body').firstChild !== null] from:body" hx-target="#drawer-body" hx-swap="innerHTML" hx-push-url="false"></div>
+<div id="drawer-backdrop" hx-get="/ui/modal/close" hx-trigger="click, keyup[key=='Escape' && document.getElementById('drawer-body').hasChildNodes()] from:body" hx-target="#drawer-body" hx-swap="innerHTML" hx-push-url="false"></div>
 <div class="drawer-panel"><div id="drawer-body"></div></div>
 </aside>
 </body>
