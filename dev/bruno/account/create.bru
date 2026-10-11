@@ -6,11 +6,11 @@ meta {
 
 post {
   url: {{baseUrl}}/api/account
-  body: none
+  body: formUrlEncoded
   auth: none
 }
 
-params:query {
-  name: Checking
-  initial_balance: 100.0
+body:form-urlencoded {
+  name: Savings
+  initial_balance: 103.00
 }

@@ -1,0 +1,16 @@
+meta {
+  name: Get Total
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/money/total
+  body: none
+  auth: none
+}
+
+params:query {
+  ~account_id: 2
+  ~date: 2026-10-11
+}

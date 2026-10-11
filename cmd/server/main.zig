@@ -40,6 +40,8 @@ pub fn main(init: process.Init) !void {
     router.delete("/api/operation", api.Operation.Delete, .{});
     router.get("/api/operation/search", api.Operation.Search, .{});
 
+    router.get("/api/money/total", api.Money.Total, .{});
+
     try server.listen();
 }
 
