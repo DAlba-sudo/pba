@@ -30,12 +30,11 @@ pub fn main(init: process.Init) !void {
     var router = try server.router(.{});
 
     router.get("/health", internal.routes.health, .{});
-    router.post("/api/account", internal.routes.api.create_account, .{});
-    router.delete("/api/account", internal.routes.api.delete_account, .{});
-    router.post("/api/operation", internal.routes.api.create_operation, .{});
-    router.delete("/api/operation", internal.routes.api.delete_operation, .{});
-    router.get("/api/search/operations", internal.routes.api.search_operations_by_title, .{});
-    router.post("/api/account/money", internal.routes.api.total_money_as_of, .{});
+    router.post("/api/account", api.Account.Create, .{});
+    router.delete("/api/account", api.Account.Delete, .{});
+    router.post("/api/operation", api.Operation.Create, .{});
+    router.delete("/api/operation", api.Operation.Delete, .{});
+    router.get("/api/operation/search", api.Operation.Search, .{});
 
     try server.listen();
 }
@@ -75,4 +74,7 @@ const process = std.process;
 const config = @import("config.zig");
 const httpz = @import("httpz");
 const pg = @import("pg");
+
 const internal = @import("internal");
+const routes = internal.routes;
+const api = routes.api;

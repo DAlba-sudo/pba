@@ -149,7 +149,7 @@ pub const Operation = struct {
         \\  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \\  deleted_at TIMESTAMP DEFAULT NULL,
         \\  value FLOAT NOT NULL,
-        \\  date TIMESTAMP NOT NULL,
+        \\  date INT NOT NULL,
         \\  title TEXT NOT NULL,
         \\  comment TEXT,
         \\  account_id INT REFERENCES account(id) ON DELETE CASCADE
@@ -161,7 +161,7 @@ pub const Operation = struct {
     updated_at: i64,
     deleted_at: ?i64,
     value: f64,
-    date: i64,
+    date: i32,
     title: []const u8,
     comment: ?[]const u8,
     account_id: i32,
@@ -226,7 +226,7 @@ pub const Operation = struct {
     }
 
     // Create
-    pub fn create(p: *pg.Pool, allocator: std.mem.Allocator, value: f32, date: i64, title: []const u8, comment: ?[]const u8, account_id: i32) Errors!Operation {
+    pub fn create(p: *pg.Pool, allocator: std.mem.Allocator, value: f32, date: i32, title: []const u8, comment: ?[]const u8, account_id: i32) Errors!Operation {
         const query =
             \\ INSERT INTO operation (value, date, title, comment, account_id) VALUES ($1, $2, $3, $4, $5)
             \\ RETURNING id, created_at, updated_at, deleted_at, value, date, title, comment, account_id;
