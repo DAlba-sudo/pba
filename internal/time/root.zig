@@ -4,42 +4,6 @@ fn isLeapYear(year: i64) bool {
     return @mod(year, 4) == 0 and (@mod(year, 100) != 0 or @mod(year, 400) == 0);
 }
 
-/// Parses "YYYY-MM-DD" into a 64-bit Unix timestamp (seconds since 1970-01-01 UTC)
-pub fn parseIsoDateToTimestamp(date_str: []const u8) !i64 {
-    // 1. Validate basic format length and separators
-    if (date_str.len < 10 or date_str[4] != '-' or date_str[7] != '-') {
-        return error.InvalidDateFormat;
-    }
-
-    // 2. Parse string segments into integers
-    const year = try std.fmt.parseInt(i64, date_str[0..4], 10);
-    const month = try std.fmt.parseInt(i64, date_str[5..7], 10);
-    const day = try std.fmt.parseInt(i64, date_str[8..10], 10);
-
-    // 3. Validate month and day boundaries
-    if (month < 1 or month > 12 or day < 1) return error.InvalidDateValues;
-
-    const days_in_months = [_]i64{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-    var max_days = days_in_months[@intCast(month - 1)];
-    if (month == 2 and isLeapYear(year)) {
-        max_days = 29;
-    }
-    if (day > max_days) return error.InvalidDateValues;
-
-    // 4. Calculate total days since the year 1 AC (0001-01-01) using standard formula
-    const y = if (month <= 2) year - 1 else year;
-    const m = if (month <= 2) month + 12 else month;
-
-    // Era calculation based on the Gregorian calendar cycles
-    const days_from_0001 = day + @divTrunc((153 * (m - 3) + 2), 5) + @divTrunc(365 * y + y, 4) - @divTrunc(y, @divTrunc(100 + y, 400 - 306));
-
-    // 1970-01-01 is 719163 days from 0001-01-01
-    const days_since_epoch = days_from_0001 - 719163;
-
-    // 5. Return total seconds
-    return days_since_epoch * 86400;
-}
-
 /// Days between the Unix epoch (1970-01-01) and the PostgreSQL epoch (2000-01-01).
 const pg_epoch_offset_days: i64 = 10957;
 
@@ -73,6 +37,29 @@ pub fn parseHtmlDateToPgDate(date_str: []const u8) !i32 {
     return @intCast(unix_days - pg_epoch_offset_days);
 }
 
+/// Formats days since 2000-01-01 as "YYYY-MM-DD" (Hinnant's civil_from_days).
+/// Valid for years 0000-9999.
+pub fn formatPgDate(days: i32, buf: *[10]u8) []const u8 {
+    const z: i64 = @as(i64, days) + pg_epoch_offset_days + 719468;
+    const era = @divFloor(z, 146097);
+    const doe = z - era * 146097;
+    const yoe = @divFloor(doe - @divFloor(doe, 1460) + @divFloor(doe, 36524) - @divFloor(doe, 146096), 365);
+    const doy = doe - (365 * yoe + @divFloor(yoe, 4) - @divFloor(yoe, 100));
+    const mp = @divFloor(5 * doy + 2, 153);
+    const d = doy - @divFloor(153 * mp + 2, 5) + 1;
+    const m = if (mp < 10) mp + 3 else mp - 9;
+    const y = yoe + era * 400 + @as(i64, if (m <= 2) 1 else 0);
+    return std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2}", .{
+        @as(u64, @intCast(y)), @as(u64, @intCast(m)), @as(u64, @intCast(d)),
+    }) catch unreachable;
+}
+
+/// Today's date (UTC) as days since 2000-01-01.
+pub fn todayPgDate(io: std.Io) i32 {
+    const secs = std.Io.Clock.real.now(io).toSeconds();
+    return @intCast(@divFloor(secs, 86400) - pg_epoch_offset_days);
+}
+
 test "html date to postgres date" {
     try std.testing.expectEqual(@as(i32, 0), try parseHtmlDateToPgDate("2000-01-01"));
     try std.testing.expectEqual(@as(i32, 1), try parseHtmlDateToPgDate("2000-01-02"));
@@ -84,10 +71,13 @@ test "html date to postgres date" {
     try std.testing.expectError(error.InvalidDateFormat, parseHtmlDateToPgDate("2023/02/28"));
 }
 
-test "parse date strings" {
-    const ts_epoch = try parseIsoDateToTimestamp("1970-01-01");
-    try std.testing.expectEqual(@as(i64, 0), ts_epoch);
-
-    const ts_leap = try parseIsoDateToTimestamp("2024-02-29");
-    try std.testing.expectEqual(@as(i64, 1709164800), ts_leap);
+test "formatPgDate roundtrip" {
+    var buf: [10]u8 = undefined;
+    try std.testing.expectEqualStrings("2000-01-01", formatPgDate(0, &buf));
+    try std.testing.expectEqualStrings("1999-12-31", formatPgDate(-1, &buf));
+    try std.testing.expectEqualStrings("2024-02-29", formatPgDate(8825, &buf));
+    var d: i32 = -36500;
+    while (d < 80000) : (d += 1) {
+        try std.testing.expectEqual(d, try parseHtmlDateToPgDate(formatPgDate(d, &buf)));
+    }
 }

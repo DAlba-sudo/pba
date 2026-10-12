@@ -7,13 +7,14 @@
 //      - date
 pub fn money(p: *pg.Pool, account_id: ?i32, date: ?[]const u8) !f64 {
     const operation_sum =
-        \\ SELECT SUM(value) AS "Total" FROM operation WHERE (deleted_at IS NULL)
+        \\ SELECT COALESCE(SUM(value), 0) AS "Total" FROM operation WHERE (deleted_at IS NULL)
+        \\  AND account_id IN (SELECT id FROM account WHERE deleted_at IS NULL)
         \\  AND ($1 ::int IS NULL OR account_id = $1)
         \\  AND (($2 ::int IS NULL AND date <= (CURRENT_DATE - DATE '2000-01-01')) OR date <= $2);
     ;
 
     const account_initial_balance_sum =
-        \\ SELECT SUM(initial_balance) AS "Total" FROM account WHERE (deleted_at IS NULL)
+        \\ SELECT COALESCE(SUM(initial_balance), 0) AS "Total" FROM account WHERE (deleted_at IS NULL)
         \\  AND ($1 ::int IS NULL OR id = $1);
     ;
 

@@ -11,6 +11,7 @@ pub const api = @import("api/root.zig");
 
 pub const App = struct {
     p: ?*pg.Pool,
+    io: std.Io,
 };
 pub const Server = httpz.Server(App);
 

@@ -10,6 +10,8 @@
             .url = "git+https://github.com/karlseguin/pg.zig.git#2e08f9817aacff1ad93531ec182ee9cc69f5bda5",
             .hash = "pg-0.0.0-Wp_7gTEVBwB8CsFe-rh8enfPHKrfA3oapKLIRoPbKUDx",
         },
+        // Vendored with a manifest flush fix; see third_party/zmpl/PATCHES.md.
+        .zmpl = .{ .path = "third_party/zmpl" },
     },
     .minimum_zig_version = "0.16.0",
     .paths = .{""},
