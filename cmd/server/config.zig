@@ -1,3 +1,13 @@
+// TLS to Postgres (needs a binary built with `zig build -Dtls=true`):
+//   PBA_DATABASE_SSLMODE      disable (default) | require | verify-full
+//   PBA_DATABASE_SSLROOTCERT  CA file for verify-full; unset uses the system trust store
+pub const SslMode = enum { disable, require, @"verify-full" };
+
+pub fn parseSslMode(value: ?[]const u8) error{InvalidSslMode}!SslMode {
+    const v = value orelse return .disable;
+    return std.meta.stringToEnum(SslMode, v) orelse error.InvalidSslMode;
+}
+
 // the following is a configuration object that can be used
 // to configure the server.
 pub const Configuration = struct {
@@ -12,6 +22,8 @@ pub const Configuration = struct {
         Host: []const u8,
         Port: u16,
         Database: []const u8,
+        SslMode: SslMode = .disable,
+        SslRootCert: ?[]const u8 = null,
         Pool: struct {
             size: u16 = 10,
             timeout: u32 = 10 * std.time.ms_per_s,
@@ -36,6 +48,16 @@ pub const Configuration = struct {
             self.Server.Port = port_as_int;
         }
 
+        const sslmode_env = environ_map.get("PBA_DATABASE_SSLMODE");
+        const sslmode = parseSslMode(sslmode_env) catch |err| {
+            std.log.err("invalid PBA_DATABASE_SSLMODE \"{s}\" (expected disable, require or verify-full)", .{sslmode_env.?});
+            return err;
+        };
+        const sslrootcert = environ_map.get("PBA_DATABASE_SSLROOTCERT");
+        if (sslrootcert != null and sslmode != .@"verify-full") {
+            std.log.warn("PBA_DATABASE_SSLROOTCERT is ignored unless PBA_DATABASE_SSLMODE=verify-full", .{});
+        }
+
         const user = environ_map.get("PBA_DATABASE_USER");
         const password = environ_map.get("PBA_DATABASE_PASSWORD");
         const host = environ_map.get("PBA_DATABASE_HOST");
@@ -51,6 +73,8 @@ pub const Configuration = struct {
                     return err;
                 },
                 .Database = database.?,
+                .SslMode = sslmode,
+                .SslRootCert = if (sslmode == .@"verify-full") sslrootcert else null,
                 .Pool = .{
                     .size = std.fmt.parseInt(u16, environ_map.get("PBA_DATABASE_POOL_SIZE") orelse "10", 10) catch blk: {
                         break :blk 10;
@@ -63,7 +87,7 @@ pub const Configuration = struct {
         }
 
         if (self.Database) |db| {
-            std.log.info("starting with an active database @{s}:{d}", .{ db.Host, db.Port });
+            std.log.info("starting with an active database @{s}:{d} (sslmode: {s})", .{ db.Host, db.Port, @tagName(db.SslMode) });
         } else {
             std.log.warn("starting without an active database, ensure all database variables are set", .{});
         }
@@ -72,3 +96,11 @@ pub const Configuration = struct {
 
 const std = @import("std");
 const httpz = @import("httpz");
+
+test parseSslMode {
+    try std.testing.expectEqual(SslMode.disable, try parseSslMode(null));
+    try std.testing.expectEqual(SslMode.disable, try parseSslMode("disable"));
+    try std.testing.expectEqual(SslMode.require, try parseSslMode("require"));
+    try std.testing.expectEqual(SslMode.@"verify-full", try parseSslMode("verify-full"));
+    try std.testing.expectError(error.InvalidSslMode, parseSslMode("prefer"));
+}

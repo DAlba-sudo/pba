@@ -10,10 +10,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // -Dtls=true links OpenSSL into pg.zig; the default build needs no OpenSSL.
+    // The paths are forwarded only with -Dtls=true (pg.zig enables OpenSSL
+    // whenever a path is set).
+    const tls = b.option(bool, "tls", "Enable Postgres TLS via OpenSSL (default: false)") orelse false;
+    const openssl_lib_path = b.option(std.Build.LazyPath, "openssl_lib_path", "OpenSSL library dir (with -Dtls=true)");
+    const openssl_include_path = b.option(std.Build.LazyPath, "openssl_include_path", "OpenSSL include dir (with -Dtls=true)");
     const pg = b.dependency("pg", .{
         .target = target,
         .optimize = optimize,
+        .openssl = if (tls) true else null,
+        .openssl_lib_path = if (tls) openssl_lib_path else null,
+        .openssl_include_path = if (tls) openssl_include_path else null,
     });
+
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "tls", tls);
 
     // zmpl: absolute templates path keeps the build independent of the cwd.
     const zmpl = b.dependency("zmpl", .{
@@ -50,6 +62,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "internal", .module = mod_internal },
                 .{ .name = "httpz", .module = httpz.module("httpz") },
                 .{ .name = "pg", .module = pg.module("pg") },
+                .{ .name = "build_options", .module = build_options.createModule() },
             },
         }),
     });
@@ -60,4 +73,6 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{ .root_module = mod_internal });
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
+    const exe_tests = b.addTest(.{ .root_module = exe.root_module });
+    test_step.dependOn(&b.addRunArtifact(exe_tests).step);
 }
