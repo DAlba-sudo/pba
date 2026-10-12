@@ -290,3 +290,11 @@ form:not(:has([name="repeat"] option[value="weekly"]:checked)) .recur-weekly { d
   .menu { position: static; } /* menus span the topbar width */
   .menu-list { left: 0; right: 0; max-width: none; }
 }
+
+/* Graph page */
+.graph-form { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin-bottom: .75rem; }
+.graph-form label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: var(--text-dim); }
+.graph-form input[type="number"] { width: 7rem; }
+.graph-error { color: var(--red); }
+.graph { width: 100%; }
+.u-legend { color: var(--text); }
