@@ -68,6 +68,17 @@ pub fn main(init: process.Init) !void {
 // so it can setup the postgres pool.
 fn init_database(c: config.Configuration) !void {
     if (c.Database) |db| {
+        const tls: pg.Conn.Opts.TLS = switch (db.SslMode) {
+            .disable => .off,
+            .require => .require,
+            .@"verify-full" => .{ .verify_full = db.SslRootCert },
+        };
+        // Never fall back to plaintext when TLS was asked for.
+        if (tls != .off and !build_options.tls) {
+            std.log.err("PBA_DATABASE_SSLMODE={s} needs TLS support; rebuild with -Dtls=true", .{@tagName(db.SslMode)});
+            return error.TlsNotBuilt;
+        }
+
         pool = pg.Pool.init(io, allocator, .{
             .size = db.Pool.size,
             .timeout = db.Pool.timeout,
@@ -79,8 +90,14 @@ fn init_database(c: config.Configuration) !void {
             .connect = .{
                 .host = db.Host,
                 .port = db.Port,
+                .tls = tls,
             },
         }) catch |err| {
+            // Pool.init connects eagerly, so TLS failures surface here.
+            if (tls != .off) {
+                std.log.err("failed to initialize database (sslmode: {s}, err: {s})", .{ @tagName(db.SslMode), @errorName(err) });
+                return err;
+            }
             std.log.err("failed to initialize database with given information, proceeding without database (err: {s})", .{@errorName(err)});
             return;
         };
@@ -100,8 +117,13 @@ const process = std.process;
 const config = @import("config.zig");
 const httpz = @import("httpz");
 const pg = @import("pg");
+const build_options = @import("build_options");
 
 const internal = @import("internal");
 const routes = internal.routes;
 const api = routes.api;
 const web = internal.web;
+
+test {
+    _ = config;
+}
