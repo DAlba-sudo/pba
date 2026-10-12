@@ -1,0 +1,16 @@
+meta {
+  name: Set Operation Draft
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/operation/draft
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  id: 1
+  draft: true
+}

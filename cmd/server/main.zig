@@ -40,6 +40,8 @@ pub fn main(init: process.Init) !void {
     router.post("/api/operation", api.Operation.Create, .{});
     router.delete("/api/operation", api.Operation.Delete, .{});
     router.get("/api/operation/search", api.Operation.Search, .{});
+    router.post("/api/operation/draft", api.Operation.Draft, .{});
+    router.post("/api/operation/recurring", api.Operation.Recurring, .{});
 
     router.get("/api/money/total", api.Money.Total, .{});
 
@@ -88,6 +90,7 @@ fn init_database(c: config.Configuration) !void {
 
         _ = try _pool.exec(internal.types.Account.DEF, .{});
         _ = try _pool.exec(internal.types.Operation.DEF, .{});
+        _ = try _pool.exec(internal.types.Operation.MIGRATE_DRAFT, .{});
     }
 }
 

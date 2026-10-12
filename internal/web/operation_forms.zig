@@ -51,7 +51,7 @@ pub fn operationCreate(app: App, req: *httpz.Request, res: *httpz.Response) !voi
     // Built from the integer only, so no JSON escaping is needed.
     const trigger = std.fmt.allocPrint(res.arena, "{{\"pba:operation-saved\":{{\"account_id\":{d}}}}}", .{r.account_id}) catch
         return render.flash(res, .internal_server_error, "Could not save the operation.");
-    _ = types.Operation.create(p, res.arena, r.amount, r.date, r.input.title, r.comment, r.account_id) catch
+    _ = types.Operation.create(p, res.arena, r.amount, r.date, r.input.title, r.comment, r.account_id, false) catch
         return render.flash(res, .internal_server_error, "Could not save the operation.");
     res.header("HX-Trigger", trigger);
 }

@@ -6,6 +6,7 @@ pub const Operation = struct {
         OperationSearchFailure,
         OperationCreationFailure,
         OperationDeletionFailure,
+        OperationUpdateFailure,
     };
 
     pub const DEF: []const u8 =
@@ -18,8 +19,14 @@ pub const Operation = struct {
         \\  date INT NOT NULL,
         \\  title TEXT NOT NULL,
         \\  comment TEXT,
-        \\  account_id INT REFERENCES account(id) ON DELETE CASCADE
+        \\  account_id INT REFERENCES account(id) ON DELETE CASCADE,
+        \\  draft BOOLEAN NOT NULL DEFAULT FALSE
         \\ );
+    ;
+
+    // Upgrades databases created before `draft` existed; run after `DEF`.
+    pub const MIGRATE_DRAFT: []const u8 =
+        \\ ALTER TABLE operation ADD COLUMN IF NOT EXISTS draft BOOLEAN NOT NULL DEFAULT FALSE;
     ;
 
     id: i32,
@@ -31,11 +38,13 @@ pub const Operation = struct {
     title: []const u8,
     comment: ?[]const u8,
     account_id: i32,
+    // Drafts are listed but excluded from money totals.
+    draft: bool,
 
     // Get
     pub fn get_by_id(p: *pg.Pool, allocator: std.mem.Allocator, id: i32) Errors!?Operation {
         const query =
-            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
+            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft FROM
             \\ operation WHERE id = $1 AND deleted_at IS NULL;
         ;
 
@@ -60,7 +69,7 @@ pub const Operation = struct {
     // Search
     pub fn search_by_title(p: *pg.Pool, allocator: std.mem.Allocator, title: []const u8, limit: i32, page: i32) Errors![]Operation {
         const query =
-            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
+            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft FROM
             \\ operation WHERE title ILIKE '%' || $1 ::text || '%' AND deleted_at IS NULL ORDER BY id ASC LIMIT $2 OFFSET $3
         ;
 
@@ -111,7 +120,7 @@ pub const Operation = struct {
     // in the text filters are not escaped.
     pub fn search(p: *pg.Pool, allocator: std.mem.Allocator, f: SearchFilter) Errors![]Operation {
         const query =
-            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
+            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft FROM
             \\  operation WHERE deleted_at IS NULL
             \\  AND ($1 ::text = '' OR title ILIKE '%' || $1 ::text || '%')
             \\  AND ($2 ::text = '' OR comment ILIKE '%' || $2 ::text || '%')
@@ -153,13 +162,13 @@ pub const Operation = struct {
     }
 
     // Create
-    pub fn create(p: *pg.Pool, allocator: std.mem.Allocator, value: f64, date: i32, title: []const u8, comment: ?[]const u8, account_id: i32) Errors!Operation {
+    pub fn create(p: *pg.Pool, allocator: std.mem.Allocator, value: f64, date: i32, title: []const u8, comment: ?[]const u8, account_id: i32, draft: bool) Errors!Operation {
         const query =
-            \\ INSERT INTO operation (value, date, title, comment, account_id) VALUES ($1, $2, $3, $4, $5)
-            \\ RETURNING id, created_at, updated_at, deleted_at, value, date, title, comment, account_id;
+            \\ INSERT INTO operation (value, date, title, comment, account_id, draft) VALUES ($1, $2, $3, $4, $5, $6)
+            \\ RETURNING id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft;
         ;
 
-        var row = p.row(query, .{ value, date, title, comment, account_id }) catch |err| {
+        var row = p.row(query, .{ value, date, title, comment, account_id, draft }) catch |err| {
             std.log.err("failed to create operation with title '{s}', and value of ${d} (err: {s})", .{ title, value, @errorName(err) });
             return Errors.OperationCreationFailure;
         };
@@ -175,6 +184,79 @@ pub const Operation = struct {
         }
 
         return Errors.OperationCreationFailure;
+    }
+
+    // Inserts one independent operation per day in `dates` with a single
+    // statement, so either all rows are created or none. Returns them in
+    // ascending date order, or null (nothing inserted) when the account is
+    // unknown or deleted. `dates` must not be empty.
+    pub fn create_many(p: *pg.Pool, allocator: std.mem.Allocator, value: f64, dates: []const i32, title: []const u8, comment: ?[]const u8, account_id: i32, draft: bool) Errors!?[]Operation {
+        std.debug.assert(dates.len > 0);
+        const query =
+            \\ INSERT INTO operation (value, date, title, comment, account_id, draft)
+            \\  SELECT $1, d, $3, $4, $5, $6 FROM unnest($2 ::int[]) AS d
+            \\  WHERE EXISTS (SELECT 1 FROM account WHERE id = $5 AND deleted_at IS NULL)
+            \\ RETURNING id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft;
+        ;
+
+        const rows = p.query(query, .{ value, dates, title, comment, account_id, draft }) catch |err| {
+            std.log.err("failed to create {d} recurring operations with title '{s}' (err: {s})", .{ dates.len, title, @errorName(err) });
+            return Errors.OperationCreationFailure;
+        };
+        defer rows.deinit();
+
+        var list: std.ArrayList(Operation) = .empty;
+        var mapper = rows.mapper(Operation, .{ .dupe = true, .allocator = allocator });
+        while (mapper.next() catch |err| {
+            std.log.err("failed to map the row result to an operation (err: {s})", .{@errorName(err)});
+            return Errors.OperationCreationFailure;
+        }) |op| {
+            list.append(allocator, op) catch return Errors.OperationCreationFailure;
+        }
+        if (list.items.len == 0) return null;
+
+        // RETURNING order is unspecified.
+        std.mem.sort(Operation, list.items, {}, struct {
+            fn lt(_: void, a: Operation, b: Operation) bool {
+                return a.date < b.date or (a.date == b.date and a.id < b.id);
+            }
+        }.lt);
+        return list.items;
+    }
+
+    // Update
+
+    // Sets `draft` on a live operation. Returns the updated row, or null if
+    // the id is unknown or deleted.
+    pub fn set_draft(p: *pg.Pool, allocator: std.mem.Allocator, id: i32, draft: bool) Errors!?Operation {
+        const query =
+            \\ UPDATE operation SET draft = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL
+            \\ RETURNING id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft;
+        ;
+
+        var row = p.row(query, .{ id, draft }) catch |err| {
+            std.log.err("failed to set draft on operation with id {d} (err: {s})", .{ id, @errorName(err) });
+            return Errors.OperationUpdateFailure;
+        };
+        if (row) |r| {
+            defer row.?.deinit() catch {};
+            return r.to(Operation, .{
+                .dupe = true,
+                .allocator = allocator,
+            }) catch |err| {
+                std.log.err("failed to map the row result to an operation (err: {s})", .{@errorName(err)});
+                return Errors.OperationUpdateFailure;
+            };
+        }
+
+        return null;
+    }
+
+    // Parses a `draft` form value: "true" or "false", else null.
+    pub fn parseDraft(s: []const u8) ?bool {
+        if (std.mem.eql(u8, s, "true")) return true;
+        if (std.mem.eql(u8, s, "false")) return false;
+        return null;
     }
 
     // Delete
@@ -205,7 +287,7 @@ pub const Operation = struct {
 
     pub fn get_by_account(p: *pg.Pool, allocator: std.mem.Allocator, account_id: i32) Errors![]Operation {
         const query =
-            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id FROM
+            \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft FROM
             \\ operation WHERE account_id = $1 AND deleted_at IS NULL ORDER BY id ASC;
         ;
 
@@ -236,6 +318,12 @@ pub const Operation = struct {
         };
     }
 };
+
+test "parseDraft" {
+    try std.testing.expectEqual(@as(?bool, true), Operation.parseDraft("true"));
+    try std.testing.expectEqual(@as(?bool, false), Operation.parseDraft("false"));
+    for ([_][]const u8{ "", "on", "1", "TRUE" }) |s| try std.testing.expectEqual(null, Operation.parseDraft(s));
+}
 
 const std = @import("std");
 const pg = @import("pg");
