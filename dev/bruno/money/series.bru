@@ -15,3 +15,8 @@ params:query {
   to: 2026-10-12
   ~account_id: 2
 }
+
+docs {
+  Response: `{"points":[[unix_seconds, balance], ...], "with_drafts":[balance, ...]}`.
+  `points` excludes drafts; `with_drafts` has the same length and order and counts every live draft.
+}

@@ -53,35 +53,42 @@ pub fn money(p: *pg.Pool, account_id: ?i32, date: ?[]const u8) !f64 {
     return starting_money + operation_money;
 }
 
-pub const SeriesPoint = struct { day: i32, balance: f64 };
+/// `balance` excludes drafts; `with_drafts` counts every live draft as final.
+pub const SeriesPoint = struct { day: i32, balance: f64, with_drafts: f64 };
 
 // Longest span `series` answers, in days.
 pub const max_series_days: i32 = 3660;
 
 // Daily running balance for every day in [from, to] (days since 2000-01-01).
 // The first point already includes all earlier operations and the initial
-// balances. Draft and deleted operations are excluded.
+// balances. Deleted operations are excluded; drafts count only in `with_drafts`.
 pub fn series(p: *pg.Pool, arena: Allocator, account_id: ?i32, from: i32, to: i32) ![]SeriesPoint {
     if (to < from or to - from >= max_series_days) return error.InvalidRange;
 
     const query =
-        \\ WITH base AS (
-        \\   SELECT (SELECT COALESCE(SUM(initial_balance), 0) FROM account
-        \\            WHERE deleted_at IS NULL AND ($1 ::int IS NULL OR id = $1))
-        \\        + (SELECT COALESCE(SUM(value), 0) FROM operation
-        \\            WHERE deleted_at IS NULL AND NOT draft AND date < $2 ::int
-        \\              AND account_id IN (SELECT id FROM account WHERE deleted_at IS NULL)
-        \\              AND ($1 ::int IS NULL OR account_id = $1)) AS amount
-        \\ ), per_day AS (
-        \\   SELECT date, SUM(value) AS amount FROM operation
-        \\    WHERE deleted_at IS NULL AND NOT draft AND date >= $2 ::int AND date <= $3 ::int
+        \\ WITH ops AS (
+        \\   SELECT date, value, draft FROM operation
+        \\    WHERE deleted_at IS NULL AND date <= $3 ::int
         \\      AND account_id IN (SELECT id FROM account WHERE deleted_at IS NULL)
         \\      AND ($1 ::int IS NULL OR account_id = $1)
+        \\ ), base AS (
+        \\   SELECT (SELECT COALESCE(SUM(initial_balance), 0) FROM account
+        \\            WHERE deleted_at IS NULL AND ($1 ::int IS NULL OR id = $1)) AS initial,
+        \\          COALESCE(SUM(value) FILTER (WHERE NOT draft), 0) AS final,
+        \\          COALESCE(SUM(value), 0) AS all_ops
+        \\     FROM ops WHERE date < $2 ::int
+        \\ ), per_day AS (
+        \\   SELECT date, COALESCE(SUM(value) FILTER (WHERE NOT draft), 0) AS final, SUM(value) AS all_ops
+        \\     FROM ops WHERE date >= $2 ::int
         \\    GROUP BY date
         \\ )
-        \\ SELECT d.day ::int, ((SELECT amount FROM base) + COALESCE(SUM(per_day.amount) OVER (ORDER BY d.day), 0)) ::float8
+        \\ SELECT d.day ::int,
+        \\        (base.initial + base.final + COALESCE(SUM(per_day.final) OVER w, 0)) ::float8,
+        \\        (base.initial + base.all_ops + COALESCE(SUM(per_day.all_ops) OVER w, 0)) ::float8
         \\   FROM generate_series($2 ::int, $3 ::int) AS d(day)
+        \\   CROSS JOIN base
         \\   LEFT JOIN per_day ON per_day.date = d.day
+        \\ WINDOW w AS (ORDER BY d.day)
         \\  ORDER BY d.day;
     ;
 
@@ -90,7 +97,7 @@ pub fn series(p: *pg.Pool, arena: Allocator, account_id: ?i32, from: i32, to: i3
 
     var out: std.ArrayList(SeriesPoint) = .empty;
     while (try rows.next()) |row| {
-        try out.append(arena, .{ .day = try row.get(i32, 0), .balance = try row.get(f64, 1) });
+        try out.append(arena, .{ .day = try row.get(i32, 0), .balance = try row.get(f64, 1), .with_drafts = try row.get(f64, 2) });
     }
     return out.items;
 }

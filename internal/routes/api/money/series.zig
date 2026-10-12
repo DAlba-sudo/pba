@@ -1,5 +1,7 @@
 // GET /api/money/series?from=YYYY-MM-DD&to=YYYY-MM-DD[&account_id=N]
-// Responds `{"points":[[unix_seconds, balance], ...]}`, one point per day.
+// Responds `{"points":[[unix_seconds, balance], ...],"with_drafts":[balance, ...]}`,
+// one point per day. `points` excludes drafts; `with_drafts[i]` is the balance
+// on the same day as `points[i]` with every live draft counted.
 pub fn series(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void {
     const p = root.p orelse return routes.jsonError(res, .service_unavailable, "Database not connected.");
 
@@ -24,6 +26,11 @@ pub fn series(root: routes.App, req: *httpz.Request, res: *httpz.Response) !void
         if (i != 0) try w.writeByte(',');
         const unix = (@as(i64, pt.day) + 10957) * 86400;
         try w.print("[{d},{d}]", .{ unix, pt.balance });
+    }
+    try w.writeAll("],\"with_drafts\":[");
+    for (pts, 0..) |pt, i| {
+        if (i != 0) try w.writeByte(',');
+        try w.print("{d}", .{pt.with_drafts});
     }
     try w.writeAll("]}");
     res.content_type = .JSON;
