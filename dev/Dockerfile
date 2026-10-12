@@ -45,9 +45,11 @@ FROM zig AS build
 ARG TLS=false
 
 # Debian's libssl-dev installs into the default system paths, which Zig
-# searches for native builds, so no -Dopenssl_*_path flags are needed.
+# searches for native builds, so no -Dopenssl_*_path flags are needed. The
+# OpenSSL headers include glibc headers (e.g. sys/types.h), and linking the
+# system OpenSSL natively needs glibc's dev files, hence libc6-dev.
 RUN if [ "${TLS}" = "true" ]; then \
-      apt-get update && apt-get install -y --no-install-recommends libssl-dev && \
+      apt-get update && apt-get install -y --no-install-recommends libssl-dev libc6-dev && \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
