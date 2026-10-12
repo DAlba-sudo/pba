@@ -130,6 +130,7 @@ input, select, textarea {
   background: var(--card);
   color: var(--card-text);
   box-shadow: var(--shadow);
+  color-scheme: light; /* native checkboxes render light on the white card */
 }
 .card input {
   border-color: var(--card-border);
@@ -210,7 +211,7 @@ input, select, textarea {
 .toggle-draft { display: inline-flex; align-items: center; gap: .25rem; margin-right: .25rem; font-size: .8rem; color: var(--card-dim); cursor: pointer; }
 
 .ops .sel { width: 1%; padding-right: 0; }
-.bulk-bar { display: none; align-items: center; justify-content: flex-end; gap: .75rem; padding: .35rem .75rem; font-size: .85rem; color: var(--card-dim); }
+.bulk-bar { display: none; align-items: center; justify-content: flex-end; gap: .75rem; margin-bottom: .5rem; padding: .35rem .75rem; border: 1px solid var(--card-border); border-radius: 6px; background: #f4f5f7; font-size: .85rem; color: var(--card-dim); }
 .card:has(input[name="sel"]:checked) .bulk-bar { display: flex; }
 .btn-bulk-del { padding: .3rem .8rem; border: 1px solid var(--red); border-radius: 4px; background: var(--red); color: #fff; cursor: pointer; }
 
@@ -265,7 +266,7 @@ body:has(#drawer-body:not(:empty)) #drawer{display:flex}
 }
 .drawer-panel h2 { margin-top: 0; }
 
-/* Forms */
+/* Forms (drawer only; `.actions` also names the ops table's last column) */
 .field { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .9rem; }
 .field label { font-size: .9rem; color: var(--text-dim); }
 .field input, .field textarea { width: 100%; }
@@ -278,15 +279,15 @@ fieldset.field legend { padding: 0; margin-bottom: .3rem; font-size: .9rem; colo
 /* Recurrence fields show only for the matching `repeat` choice. */
 form:has([name="repeat"] option[value="none"]:checked) .recur,
 form:not(:has([name="repeat"] option[value="weekly"]:checked)) .recur-weekly { display: none; }
-.actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
-.actions button {
+.drawer-panel .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+.drawer-panel .actions button {
   padding: .5rem 1rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
 }
-.actions button[type="submit"] { border-color: var(--green); background: var(--green); color: #fff; }
-.actions button[type="submit"]:hover:not(:disabled) { background: var(--green-hover); }
+.drawer-panel .actions button[type="submit"] { border-color: var(--green); background: var(--green); color: #fff; }
+.drawer-panel .actions button[type="submit"]:hover:not(:disabled) { background: var(--green-hover); }
 
 @media (max-width: 600px) {
   .page { padding: .75rem; }
