@@ -186,8 +186,8 @@ pub const Operation = struct {
         return Errors.OperationCreationFailure;
     }
 
-    // Inserts one independent operation per day in `dates` with a single
-    // statement, so either all rows are created or none. Returns them in
+    // Inserts one independent operation per day in `dates` in one statement
+    // and transaction, so either all rows are created or none. Returns them in
     // ascending date order, or null (nothing inserted) when the account is
     // unknown or deleted. `dates` must not be empty.
     pub fn create_many(p: *pg.Pool, allocator: std.mem.Allocator, value: f64, dates: []const i32, title: []const u8, comment: ?[]const u8, account_id: i32, draft: bool) Errors!?[]Operation {
@@ -199,20 +199,35 @@ pub const Operation = struct {
             \\ RETURNING id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft;
         ;
 
-        const rows = p.query(query, .{ value, dates, title, comment, account_id, draft }) catch |err| {
-            std.log.err("failed to create {d} recurring operations with title '{s}' (err: {s})", .{ dates.len, title, @errorName(err) });
+        // A transaction so a failure while reading the rows back also undoes the insert.
+        const c = p.acquire() catch |err| {
+            std.log.err("failed to acquire a connection (err: {s})", .{@errorName(err)});
             return Errors.OperationCreationFailure;
         };
-        defer rows.deinit();
+        defer c.release();
+        c.begin() catch return Errors.OperationCreationFailure;
+        errdefer c.rollback() catch {};
 
         var list: std.ArrayList(Operation) = .empty;
-        var mapper = rows.mapper(Operation, .{ .dupe = true, .allocator = allocator });
-        while (mapper.next() catch |err| {
-            std.log.err("failed to map the row result to an operation (err: {s})", .{@errorName(err)});
-            return Errors.OperationCreationFailure;
-        }) |op| {
-            list.append(allocator, op) catch return Errors.OperationCreationFailure;
+        {
+            const rows = c.queryOpts(query, .{ value, dates, title, comment, account_id, draft }, .{ .column_names = true }) catch |err| {
+                std.log.err("failed to create {d} recurring operations with title '{s}' (err: {s})", .{ dates.len, title, @errorName(err) });
+                return Errors.OperationCreationFailure;
+            };
+            defer rows.deinit();
+
+            var mapper = rows.mapper(Operation, .{ .dupe = true, .allocator = allocator });
+            while (mapper.next() catch |err| {
+                std.log.err("failed to map the row result to an operation (err: {s})", .{@errorName(err)});
+                return Errors.OperationCreationFailure;
+            }) |op| {
+                list.append(allocator, op) catch return Errors.OperationCreationFailure;
+            }
         }
+        c.commit() catch |err| {
+            std.log.err("failed to commit recurring operations (err: {s})", .{@errorName(err)});
+            return Errors.OperationCreationFailure;
+        };
         if (list.items.len == 0) return null;
 
         // RETURNING order is unspecified.
