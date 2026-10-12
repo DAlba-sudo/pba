@@ -19,7 +19,7 @@ pub fn main(init: process.Init) !void {
     var server = try internal.routes.Server.init(io, allocator, .{
         .address = configuration.Server.InterfaceFunc(configuration.Server.Port),
         .request = .{
-            .max_form_count = 16,
+            .max_form_count = 256,
         },
     }, internal.routes.App{
         .p = pool,
@@ -52,6 +52,7 @@ pub fn main(init: process.Init) !void {
     router.get("/ui/cards/:id", web.handlers_cards.card, .{});
     router.get("/ui/cards/:id/ops", web.handlers_cards.cardOps, .{});
     router.delete("/ui/operations/:id", web.delete_handlers.operationDelete, .{});
+    router.post("/ui/cards/:id/operations/delete", web.delete_handlers.operationsDelete, .{});
     router.post("/ui/operations/:id/draft", web.delete_handlers.operationDraft, .{});
     router.delete("/ui/accounts/:id", web.delete_handlers.accountDelete, .{});
     router.get("/ui/accounts/new", web.account_forms.accountNew, .{});

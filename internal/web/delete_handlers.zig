@@ -24,6 +24,33 @@ pub fn operationDelete(app: App, req: *httpz.Request, res: *httpz.Response) !voi
     cards.renderCardFragment(app, res, account_id, f, oq);
 }
 
+/// Most operations one bulk request may delete (bounds `max_form_count`).
+const max_bulk = 200;
+
+/// POST /ui/cards/:id/operations/delete (form `sel`=<operation id>, repeated,
+/// plus filters and `oq`): soft-deletes the selected operations of that
+/// account and re-renders its card. Ids from other accounts are ignored.
+pub fn operationsDelete(app: App, req: *httpz.Request, res: *httpz.Response) !void {
+    const p = app.p orelse return cards.noDatabase(res);
+    const account_id = cards.pathId(req) orelse return notFound(res, "Account");
+    const map = req.formData() catch return render.flash(res, .bad_request, "Invalid form data.");
+    const f = forms.Filters.fromMap(res.arena, map, time.todayPgDate(app.io)) catch |err| return cards.fail(res, "parse filters", err);
+    const oq = std.mem.trim(u8, map.get("oq") orelse "", " \t\r\n");
+
+    var ids: std.ArrayList(i32) = .empty;
+    var it = map.iterator();
+    while (it.next()) |kv| {
+        if (!std.mem.eql(u8, kv.key, "sel")) continue;
+        const id = forms.parseId(kv.value) orelse return render.flash(res, .bad_request, "Invalid operation id.");
+        if (ids.items.len == max_bulk) return render.flash(res, .bad_request, "Too many operations selected.");
+        ids.append(res.arena, id) catch |err| return cards.fail(res, "collect ids", err);
+    }
+    if (ids.items.len == 0) return render.flash(res, .bad_request, "No operations selected.");
+
+    _ = types.Operation.delete_live_many(p, account_id, ids.items) catch |err| return cards.fail(res, "delete operations", err);
+    cards.renderCardFragment(app, res, account_id, f, oq);
+}
+
 /// POST /ui/operations/:id/draft (form `draft`=true|false, filters, `oq`):
 /// sets the flag and re-renders the card like `operationDelete`. POST params
 /// arrive in the body, so filters are read from the form.
