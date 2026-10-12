@@ -42,7 +42,7 @@ CMD ["zig", "version"]
 
 FROM zig AS build
 
-ARG TLS=false
+ARG TLS=true
 
 # Debian's libssl-dev installs into the default system paths, which Zig
 # searches for native builds, so no -Dopenssl_*_path flags are needed. The
