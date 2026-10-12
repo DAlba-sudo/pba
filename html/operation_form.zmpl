@@ -37,6 +37,43 @@
 <p class="field-error">{{$.err_comment}}</p>
 @end
 </div>
+<div class="field">
+<label class="check"><input name="draft" type="checkbox" value="true" {{$.draft_attr}}> Draft</label>
+<p class="muted">Listed but left out of totals.</p>
+@if ($.err_draft)
+<p class="field-error">{{$.err_draft}}</p>
+@end
+</div>
+<div class="field">
+<label for="op-repeat">Repeat</label>
+<select id="op-repeat" name="repeat">
+@for ($.repeat_opts) |o| {
+<option value="{{o.name}}" {{o.attr}}>{{o.label}}</option>
+}
+</select>
+@if ($.err_repeat)
+<p class="field-error">{{$.err_repeat}}</p>
+@end
+</div>
+<div class="field recur">
+<label for="op-until">Until</label>
+<input id="op-until" name="until" type="date" value="{{$.until}}">
+<p class="muted">Last possible date; created only if it matches.</p>
+@if ($.err_until)
+<p class="field-error">{{$.err_until}}</p>
+@end
+</div>
+<fieldset class="field recur-weekly">
+<legend>Weekdays</legend>
+<div class="weekdays">
+@for ($.weekday_opts) |o| {
+<label class="check"><input name="{{o.name}}" type="checkbox" value="on" {{o.attr}}> {{o.label}}</label>
+}
+</div>
+@if ($.err_weekdays)
+<p class="field-error">{{$.err_weekdays}}</p>
+@end
+</fieldset>
 <div class="actions">
 <button type="button" hx-get="/ui/modal/close" hx-target="#drawer-body" hx-swap="innerHTML" hx-push-url="false">Cancel</button>
 <button type="submit">Save</button>

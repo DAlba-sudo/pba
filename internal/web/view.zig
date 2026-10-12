@@ -24,6 +24,10 @@ pub const OpRow = struct {
     /// "None." when null/empty (with `comment_cls` "muted").
     comment: []const u8,
     comment_cls: []const u8,
+    /// Drafts are listed (muted, marked) but left out of every total.
+    draft: bool,
+    /// `hx-vals` JSON of the toggle: the opposite state.
+    toggle_vals: []const u8,
 };
 
 pub const CardView = struct {
@@ -123,6 +127,8 @@ pub fn buildOps(p: *pg.Pool, arena: std.mem.Allocator, account_id: i32, effectiv
             .date = try arena.dupe(u8, time.formatPgDate(op.date, &buf)),
             .comment = if (comment.len == 0) "None." else comment,
             .comment_cls = if (comment.len == 0) "muted" else "",
+            .draft = op.draft,
+            .toggle_vals = if (op.draft) "{\"draft\":\"false\"}" else "{\"draft\":\"true\"}",
         };
     }
     const has_more = ops.len > OP_PAGE;

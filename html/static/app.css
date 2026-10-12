@@ -195,6 +195,19 @@ input, select, textarea {
 .ops tr:not(.more-row) > :last-child { width: 1%; white-space: nowrap; text-align: right; }
 .ops .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .muted { color: var(--card-dim); font-style: italic; }
+/* Draft rows: listed but excluded from totals. */
+.ops tr.draft td, .ops tr.draft .num { color: var(--card-dim); }
+.tag-draft {
+  display: inline-block;
+  margin-left: .35rem;
+  padding: 0 .4rem;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-style: normal;
+  color: var(--card-dim);
+}
+.toggle-draft { display: inline-flex; align-items: center; gap: .25rem; margin-right: .25rem; font-size: .8rem; color: var(--card-dim); cursor: pointer; }
 
 .more-row td { text-align: center; border-bottom: 0; }
 .more-row button {
@@ -252,6 +265,14 @@ body:has(#drawer-body:not(:empty)) #drawer{display:flex}
 .field label { font-size: .9rem; color: var(--text-dim); }
 .field input, .field textarea { width: 100%; }
 .field-error { color: #ff8a8a; font-size: .85rem; }
+fieldset.field { border: 0; padding: 0; min-width: 0; }
+fieldset.field legend { padding: 0; margin-bottom: .3rem; font-size: .9rem; color: var(--text-dim); }
+.field .check { display: inline-flex; align-items: center; gap: .4rem; color: var(--text); }
+.field .check input { width: auto; }
+.weekdays { display: flex; flex-wrap: wrap; gap: .25rem .9rem; }
+/* Recurrence fields show only for the matching `repeat` choice. */
+form:has([name="repeat"] option[value="none"]:checked) .recur,
+form:not(:has([name="repeat"] option[value="weekly"]:checked)) .recur-weekly { display: none; }
 .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 .actions button {
   padding: .5rem 1rem;
