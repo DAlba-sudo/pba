@@ -209,6 +209,11 @@ input, select, textarea {
 }
 .toggle-draft { display: inline-flex; align-items: center; gap: .25rem; margin-right: .25rem; font-size: .8rem; color: var(--card-dim); cursor: pointer; }
 
+.ops .sel { width: 1%; padding-right: 0; }
+.bulk-bar { display: none; align-items: center; justify-content: flex-end; gap: .75rem; padding: .35rem .75rem; font-size: .85rem; color: var(--card-dim); }
+.card:has(input[name="sel"]:checked) .bulk-bar { display: flex; }
+.btn-bulk-del { padding: .3rem .8rem; border: 1px solid var(--red); border-radius: 4px; background: var(--red); color: #fff; cursor: pointer; }
+
 .more-row td { text-align: center; border-bottom: 0; }
 .more-row button {
   padding: .35rem 1rem;

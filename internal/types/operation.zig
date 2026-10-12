@@ -300,6 +300,21 @@ pub const Operation = struct {
         return (affected orelse 0) > 0;
     }
 
+    // Soft-deletes the live operations in `ids` that belong to `account_id`
+    // (other ids are ignored). Returns how many were deleted.
+    pub fn delete_live_many(p: *pg.Pool, account_id: i32, ids: []const i32) Errors!usize {
+        const query =
+            \\ UPDATE operation SET deleted_at = CURRENT_TIMESTAMP
+            \\ WHERE account_id = $1 AND id = ANY($2) AND deleted_at IS NULL;
+        ;
+
+        const affected = p.exec(query, .{ account_id, ids }) catch |err| {
+            std.log.err("failed to delete {d} operations of account {d} (err: {s})", .{ ids.len, account_id, @errorName(err) });
+            return Errors.OperationDeletionFailure;
+        };
+        return @intCast(affected orelse 0);
+    }
+
     pub fn get_by_account(p: *pg.Pool, allocator: std.mem.Allocator, account_id: i32) Errors![]Operation {
         const query =
             \\ SELECT id, created_at, updated_at, deleted_at, value, date, title, comment, account_id, draft FROM
