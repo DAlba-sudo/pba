@@ -301,6 +301,8 @@ form:not(:has([name="repeat"] option[value="weekly"]:checked)) .recur-weekly { d
 .graph-form { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin-bottom: .75rem; }
 .graph-form label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: var(--text-dim); }
 .graph-form input[type="number"] { width: 7rem; }
+.graph-to { margin: 0; display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: var(--text-dim); }
+.graph-to output { color: var(--text); font-size: 1rem; padding: .3rem 0; }
 .graph-error { color: var(--red); }
 .graph { width: 100%; }
 .u-legend { color: var(--text); }

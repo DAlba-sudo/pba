@@ -45,16 +45,14 @@ const Dashboard = struct {
     graph: GraphView,
 };
 
-/// Default bounds of the balance chart: the last 90 days.
+/// Default bounds of the balance chart: the 90 days up to the global date.
 const GraphView = struct { from: []const u8, to: []const u8 };
 
-fn buildGraph(app: App, arena: std.mem.Allocator) !GraphView {
-    const today = time.todayPgDate(app.io);
+fn buildGraph(arena: std.mem.Allocator, f: Filters) !GraphView {
     var from_buf: [10]u8 = undefined;
-    var to_buf: [10]u8 = undefined;
     return .{
-        .from = try arena.dupe(u8, time.formatPgDate(today - 90, &from_buf)),
-        .to = try arena.dupe(u8, time.formatPgDate(today, &to_buf)),
+        .from = try arena.dupe(u8, time.formatPgDate(f.effective_day - 90, &from_buf)),
+        .to = f.effective_date,
     };
 }
 
@@ -65,7 +63,7 @@ fn buildDashboard(app: App, arena: std.mem.Allocator, f: Filters) !Dashboard {
         .page = .{ .cards = &.{}, .has_more = false, .next_query = "", .empty = view.msg_no_db },
         .more = false,
         .show_empty = true,
-        .graph = try buildGraph(app, arena),
+        .graph = try buildGraph(arena, f),
     };
     const page = try view.buildAccountsPage(p, arena, f, null);
     return .{
@@ -74,7 +72,7 @@ fn buildDashboard(app: App, arena: std.mem.Allocator, f: Filters) !Dashboard {
         .page = page,
         .more = page.has_more,
         .show_empty = page.empty.len > 0,
-        .graph = try buildGraph(app, arena),
+        .graph = try buildGraph(arena, f),
     };
 }
 
