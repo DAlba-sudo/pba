@@ -1,0 +1,17 @@
+meta {
+  name: Get Series
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/money/series
+  body: none
+  auth: none
+}
+
+params:query {
+  from: 2026-07-14
+  to: 2026-10-12
+  ~account_id: 2
+}
