@@ -1,5 +1,6 @@
-// Balance-over-time chart: reads the bounds from #graph-form, fetches
-// /api/money/series and draws it with uPlot.
+// Balance-over-time chart on the dashboard: reads the bounds from #graph-form
+// and the account from the dashboard filters, fetches /api/money/series, draws
+// it with uPlot and redraws whenever the dashboard data changes.
 (function () {
   var form = document.getElementById("graph-form");
   var host = document.getElementById("graph");
@@ -55,7 +56,8 @@
     var d = new FormData(form);
     var from = d.get("from"), to = d.get("to");
     var q = new URLSearchParams({ from: from, to: to });
-    if (d.get("account_id")) q.set("account_id", d.get("account_id"));
+    var acct = document.querySelector('#filters input[name="account"]:checked');
+    if (acct && acct.value !== "all") q.set("account_id", acct.value);
     fail("");
     fetch("/api/money/series?" + q)
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
@@ -70,7 +72,22 @@
       .catch(function () { fail("Could not load the data."); });
   }
 
+  var timer = null;
+  function reload() {
+    clearTimeout(timer);
+    timer = setTimeout(load, 100);
+  }
+
   form.addEventListener("submit", function (e) { e.preventDefault(); load(); });
+  form.addEventListener("change", reload);
+  // Operations/accounts added, deleted or toggled (any non-GET htmx request),
+  // and filter changes (the #filters form's own GET) change the balances.
+  document.body.addEventListener("htmx:afterRequest", function (e) {
+    var cfg = e.detail.requestConfig || {};
+    if (!e.detail.successful) return;
+    var changed = (cfg.verb || "get") !== "get" || (cfg.elt && cfg.elt.id === "filters");
+    if (changed) reload();
+  });
   window.addEventListener("resize", function () {
     if (plot) plot.setSize({ width: host.clientWidth, height: 400 });
   });

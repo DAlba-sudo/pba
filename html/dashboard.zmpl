@@ -5,11 +5,13 @@
 @partial total($.total, false)
 @partial date_menu($.header, false)
 @partial account_menu($.header, false)
-<a class="menu-link" href="/graph">Graph</a>
 </header>
 <input class="search-full" type="search" name="q" value="{{$.header.q}}" placeholder="Search accounts" aria-label="Search accounts">
 </form>
+@partial graph($.graph)
 <main id="cards" class="cards">
 @partial cards_list($.page, $.more, $.show_empty)
 </main>
 </div>
+<script src="/static/uPlot-1.6.31.iife.min.js"></script>
+<script src="/static/graph.js"></script>

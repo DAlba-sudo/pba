@@ -298,4 +298,3 @@ form:not(:has([name="repeat"] option[value="weekly"]:checked)) .recur-weekly { d
 .graph-error { color: var(--red); }
 .graph { width: 100%; }
 .u-legend { color: var(--text); }
-.menu-link { padding: .4rem .8rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); text-decoration: none; }
