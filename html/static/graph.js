@@ -8,6 +8,8 @@
   if (window.pbaGraphReload) return window.pbaGraphReload();
   var plot = null;
   var DAY = 86400000;
+  // Per-account lines: readable on the dark grid and distinct from the total's blues.
+  var PALETTE = ["#f59e0b", "#2dd4bf", "#f472b6", "#facc15", "#c084fc", "#f87171", "#a3e635", "#d1d5db"];
 
   function $(id) { return document.getElementById(id); }
   function iso(ms) { return new Date(ms).toISOString().slice(0, 10); }
@@ -39,16 +41,21 @@
     return s;
   }
 
-  function draw(host, points, withDrafts, xMin, xMax, yMin, yMax) {
+  function draw(host, j, xMin, xMax, yMin, yMax) {
+    var points = j.points, withDrafts = j.with_drafts;
     var xs = points.map(function (p) { return p[0]; });
     var ys = points.map(function (p) { return p[1]; });
     var series = [{}], data = [xs];
+    (j.accounts || []).forEach(function (a, i) {
+      series.push(line(a.name, PALETTE[i % PALETTE.length], { width: 1.5 }));
+      data.push(a.balance);
+    });
     // Drawn first so the balance line stays on top; omitted when drafts change nothing.
     if (withDrafts.some(function (v, i) { return v !== ys[i]; })) {
       series.push(line("With drafts", "#9ec2ff", { dash: [4, 4] }));
       data.push(withDrafts);
     }
-    series.push(line("Balance", "#5b9cff"));
+    series.push(line("Balance", "#5b9cff", { width: 2.5 }));
     data.push(ys);
     if (plot) plot.destroy();
     plot = new uPlot({
@@ -88,8 +95,13 @@
     var from = d.get("from");
     var q = new URLSearchParams({ from: from, to: to });
     var acct = document.querySelector('#filters input[name="account"]:checked');
-    if (acct && acct.value !== "all") q.set("account_id", acct.value);
+    var single = !!acct && acct.value !== "all";
+    // A breakdown of one account is moot: the box is disabled and ignored.
+    form.elements.by_account.disabled = single;
+    if (single) q.set("account_id", acct.value);
+    else if (form.elements.by_account.checked) q.set("by_account", "1");
     fail("");
+    $("graph-note").hidden = true;
     fetch("/api/money/series?" + q)
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (r) {
@@ -98,7 +110,8 @@
         var xMax = Date.parse(to + "T00:00:00Z") / 1000;
         var yMin = num(d.get("ymin")), yMax = num(d.get("ymax"));
         if (yMin !== null && yMax !== null && yMin >= yMax) return fail("Min $ must be below Max $.");
-        draw(host, r.j.points, r.j.with_drafts, xMin, xMax, yMin, yMax);
+        $("graph-note").hidden = !r.j.truncated;
+        draw(host, r.j, xMin, xMax, yMin, yMax);
       })
       .catch(function () { fail("Could not load the data."); });
   }
