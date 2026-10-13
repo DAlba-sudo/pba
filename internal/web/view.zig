@@ -42,7 +42,12 @@ pub const CardView = struct {
     next_cursor: []const u8,
     /// First page with no rows at all.
     no_ops: bool = false,
+    /// Live accounts the bulk bar can move operations to (all but this one).
+    move_targets: []const MoveTarget = &.{},
+    can_move: bool = false,
 };
+
+pub const MoveTarget = struct { id: i32, name: []const u8 };
 
 pub const AccountsPage = struct {
     cards: []const CardView,
@@ -89,9 +94,8 @@ pub fn offlineHeader(f: Filters) HeaderView {
 
 pub const offline_total: Total = .{ .text = "n/a", .cls = "" };
 
-/// Header menus; the account dropdown always lists every live account.
-pub fn buildHeader(p: *pg.Pool, arena: std.mem.Allocator, f: Filters) !HeaderView {
-    const all = try Account.search(p, arena, .{});
+/// Header menus; the account dropdown always lists every live account (`all`).
+pub fn buildHeader(arena: std.mem.Allocator, f: Filters, all: []const Account) !HeaderView {
     const opts = try arena.alloc(AccountOpt, all.len);
     var h = offlineHeader(f);
     for (all, opts) |a, *o| {
@@ -145,19 +149,40 @@ pub fn buildOps(p: *pg.Pool, arena: std.mem.Allocator, account_id: i32, effectiv
     };
 }
 
-/// Full card: name, balance as of the effective date, first page of operations.
-pub fn buildCard(p: *pg.Pool, arena: std.mem.Allocator, a: Account, f: Filters, oq: []const u8) !CardView {
+/// Full card: name, balance as of the effective date, first page of operations,
+/// move targets from `all` (every live account) ordered by name.
+pub fn buildCard(p: *pg.Pool, arena: std.mem.Allocator, a: Account, f: Filters, oq: []const u8, all: []const Account) !CardView {
     var c = try buildOps(p, arena, a.id, f.effective_day, oq, null);
     const balance = try analysis.Money.money(p, a.id, f.effective_date);
     c.name = a.name;
     c.balance = try format.money(arena, balance, true);
     c.balance_cls = format.cls(balance);
+    c.move_targets = try moveTargets(arena, all, a.id);
+    c.can_move = c.move_targets.len > 0;
     return c;
+}
+
+fn moveTargets(arena: std.mem.Allocator, all: []const Account, except: i32) ![]const MoveTarget {
+    var list: std.ArrayList(MoveTarget) = try .initCapacity(arena, all.len);
+    for (all) |a| {
+        if (a.id != except) list.appendAssumeCapacity(.{ .id = a.id, .name = a.name });
+    }
+    std.mem.sort(MoveTarget, list.items, {}, struct {
+        fn lt(_: void, x: MoveTarget, y: MoveTarget) bool {
+            return switch (std.mem.order(u8, x.name, y.name)) {
+                .lt => true,
+                .gt => false,
+                .eq => x.id < y.id,
+            };
+        }
+    }.lt);
+    return list.items;
 }
 
 /// Cards for the filters: the selected account only, else accounts matching `q`
 /// after `after_id` (keyset), ACCOUNT_PAGE at a time.
-pub fn buildAccountsPage(p: *pg.Pool, arena: std.mem.Allocator, f: Filters, after_id: ?i32) !AccountsPage {
+/// `all` is every live account (see `buildCard`).
+pub fn buildAccountsPage(p: *pg.Pool, arena: std.mem.Allocator, f: Filters, after_id: ?i32, all: []const Account) !AccountsPage {
     var accts: []const Account = &.{};
     if (f.account) |id| {
         // A single card never paginates; a continuation request gets nothing.
@@ -173,7 +198,7 @@ pub fn buildAccountsPage(p: *pg.Pool, arena: std.mem.Allocator, f: Filters, afte
     const has_more = accts.len > ACCOUNT_PAGE;
     const shown = accts[0..@min(accts.len, ACCOUNT_PAGE)];
     const cards = try arena.alloc(CardView, shown.len);
-    for (shown, cards) |a, *c| c.* = try buildCard(p, arena, a, f, "");
+    for (shown, cards) |a, *c| c.* = try buildCard(p, arena, a, f, "", all);
 
     var next_query: []const u8 = "";
     if (has_more) {

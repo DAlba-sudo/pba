@@ -65,9 +65,10 @@ fn buildDashboard(app: App, arena: std.mem.Allocator, f: Filters) !Dashboard {
         .show_empty = true,
         .graph = try buildGraph(arena, f),
     };
-    const page = try view.buildAccountsPage(p, arena, f, null);
+    const all = try Account.search(p, arena, .{});
+    const page = try view.buildAccountsPage(p, arena, f, null, all);
     return .{
-        .header = try view.buildHeader(p, arena, f),
+        .header = try view.buildHeader(arena, f, all),
         .total = try view.buildTotal(p, arena, f),
         .page = page,
         .more = page.has_more,
@@ -100,7 +101,8 @@ pub fn accountsPage(app: App, req: *httpz.Request, res: *httpz.Response) !void {
     const query = req.query() catch |err| return fail(res, "parse query", err);
     const after = forms.parseId(query.get("cursor") orelse "") orelse
         return render.flash(res, .bad_request, "Invalid cursor.");
-    const page = view.buildAccountsPage(p, res.arena, f, after) catch |err| return fail(res, "build accounts page", err);
+    const all = Account.search(p, res.arena, .{}) catch |err| return fail(res, "list accounts", err);
+    const page = view.buildAccountsPage(p, res.arena, f, after, all) catch |err| return fail(res, "build accounts page", err);
     render.send(app, res, "accounts_page", false, .{ .page = page, .more = page.has_more, .show_empty = false }) catch |err|
         fail(res, "render accounts page", err);
 }
@@ -123,7 +125,7 @@ pub fn renderCardFragment(app: App, res: *httpz.Response, id: i32, f: Filters, o
 fn cardFragment(app: App, p: *pg.Pool, res: *httpz.Response, id: i32, f: Filters, oq: []const u8) !void {
     const a = try Account.get_by_id(p, res.arena, id) orelse
         return render.flash(res, .not_found, "Account not found.");
-    const c = try view.buildCard(p, res.arena, a, f, oq);
+    const c = try view.buildCard(p, res.arena, a, f, oq, try Account.search(p, res.arena, .{}));
     const show_total = f.account == null or f.account == id;
     const total = if (show_total) try view.buildTotal(p, res.arena, f) else view.offline_total;
     try render.send(app, res, "card_fragment", false, .{ .card = c, .total = total, .show_total = show_total });

@@ -54,6 +54,7 @@ pub fn main(init: process.Init) !void {
     router.delete("/ui/operations/:id", web.delete_handlers.operationDelete, .{});
     router.post("/ui/cards/:id/operations/delete", web.delete_handlers.operationsDelete, .{});
     router.post("/ui/cards/:id/operations/draft", web.delete_handlers.operationsDraft, .{});
+    router.post("/ui/cards/:id/operations/move", web.move_handlers.operationsMove, .{});
     router.post("/ui/operations/:id/draft", web.delete_handlers.operationDraft, .{});
     router.delete("/ui/accounts/:id", web.delete_handlers.accountDelete, .{});
     router.get("/ui/accounts/new", web.account_forms.accountNew, .{});

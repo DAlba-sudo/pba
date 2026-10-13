@@ -282,6 +282,23 @@ pub const Operation = struct {
         return @intCast(affected orelse 0);
     }
 
+    // Moves the live operations in `ids` that belong to `from_id` to `to_id`
+    // (other ids are ignored). Nothing moves unless both accounts are live.
+    // Returns how many were moved.
+    pub fn move_many(p: *pg.Pool, from_id: i32, to_id: i32, ids: []const i32) Errors!usize {
+        const query =
+            \\ UPDATE operation SET account_id = $2, updated_at = CURRENT_TIMESTAMP
+            \\ WHERE account_id = $1 AND id = ANY($3) AND deleted_at IS NULL
+            \\  AND (SELECT count(*) FROM account WHERE id IN ($1, $2) AND deleted_at IS NULL) = 2;
+        ;
+
+        const affected = p.exec(query, .{ from_id, to_id, ids }) catch |err| {
+            std.log.err("failed to move {d} operations from account {d} to {d} (err: {s})", .{ ids.len, from_id, to_id, @errorName(err) });
+            return Errors.OperationUpdateFailure;
+        };
+        return @intCast(affected orelse 0);
+    }
+
     // Parses a `draft` form value: "true" or "false", else null.
     pub fn parseDraft(s: []const u8) ?bool {
         if (std.mem.eql(u8, s, "true")) return true;
