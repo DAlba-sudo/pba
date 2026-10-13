@@ -60,6 +60,7 @@ pub fn main(init: process.Init) !void {
     router.get("/ui/modal/close", web.account_forms.modalClose, .{});
     router.get("/ui/operations/new", web.operation_forms.operationNew, .{});
     router.post("/ui/operations", web.operation_forms.operationCreate, .{});
+    router.get("/export/operations.csv", web.export_csv.operationsCsv, .{});
     router.get(web.static.uplot_js_path, web.static.uplotJs, .{});
     router.get(web.static.uplot_css_path, web.static.uplotCss, .{});
     router.get(web.static.graph_js_path, web.static.graphJs, .{});
