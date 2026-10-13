@@ -1,0 +1,26 @@
+meta {
+  name: Get Series
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/money/series
+  body: none
+  auth: none
+}
+
+params:query {
+  from: 2026-07-14
+  to: 2026-10-12
+  ~account_id: 2
+  ~by_account: 1
+}
+
+docs {
+  Response: `{"points":[[unix_seconds, balance], ...], "with_drafts":[balance, ...]}`.
+  `points` excludes drafts; `with_drafts` has the same length and order and counts every live draft.
+  `by_account=1` (ignored with `account_id`) adds `"accounts":[{"id":N,"name":"...","balance":[...]}, ...]`:
+  the non-draft balance of each of the first 12 live accounts by id, aligned with `points`.
+  `"truncated":true` is added when more live accounts exist.
+}

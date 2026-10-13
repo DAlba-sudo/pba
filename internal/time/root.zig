@@ -18,14 +18,23 @@ pub fn parseHtmlDateToPgDate(date_str: []const u8) !i32 {
     const month = try std.fmt.parseInt(i64, date_str[5..7], 10);
     const day = try std.fmt.parseInt(i64, date_str[8..10], 10);
 
-    if (month < 1 or month > 12 or day < 1) return error.InvalidDateValues;
+    if (month < 1 or month > 12 or day < 1 or day > daysInMonth(year, month)) return error.InvalidDateValues;
+    return fromCivil(year, month, day);
+}
 
+/// Number of days in `month` (1-12) of `year`.
+pub fn daysInMonth(year: i64, month: i64) i64 {
     const days_in_months = [_]i64{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-    var max_days = days_in_months[@intCast(month - 1)];
-    if (month == 2 and isLeapYear(year)) max_days = 29;
-    if (day > max_days) return error.InvalidDateValues;
+    if (month == 2 and isLeapYear(year)) return 29;
+    return days_in_months[@intCast(month - 1)];
+}
 
-    // Days since 1970-01-01 (Howard Hinnant's days_from_civil), March-based years.
+/// A proleptic Gregorian calendar date.
+pub const Civil = struct { year: i64, month: i64, day: i64 };
+
+/// Valid calendar date to days since 2000-01-01 (Howard Hinnant's days_from_civil).
+pub fn fromCivil(year: i64, month: i64, day: i64) i32 {
+    // March-based years.
     const y = if (month <= 2) year - 1 else year;
     const era = @divFloor(y, 400);
     const yoe = y - era * 400;
@@ -33,13 +42,11 @@ pub fn parseHtmlDateToPgDate(date_str: []const u8) !i32 {
     const doy = @divFloor(153 * mp + 2, 5) + day - 1;
     const doe = yoe * 365 + @divFloor(yoe, 4) - @divFloor(yoe, 100) + doy;
     const unix_days = era * 146097 + doe - 719468;
-
     return @intCast(unix_days - pg_epoch_offset_days);
 }
 
-/// Formats days since 2000-01-01 as "YYYY-MM-DD" (Hinnant's civil_from_days).
-/// Valid for years 0000-9999.
-pub fn formatPgDate(days: i32, buf: *[10]u8) []const u8 {
+/// Days since 2000-01-01 to a calendar date (Hinnant's civil_from_days).
+pub fn toCivil(days: i32) Civil {
     const z: i64 = @as(i64, days) + pg_epoch_offset_days + 719468;
     const era = @divFloor(z, 146097);
     const doe = z - era * 146097;
@@ -48,9 +55,20 @@ pub fn formatPgDate(days: i32, buf: *[10]u8) []const u8 {
     const mp = @divFloor(5 * doy + 2, 153);
     const d = doy - @divFloor(153 * mp + 2, 5) + 1;
     const m = if (mp < 10) mp + 3 else mp - 9;
-    const y = yoe + era * 400 + @as(i64, if (m <= 2) 1 else 0);
+    return .{ .year = yoe + era * 400 + @as(i64, if (m <= 2) 1 else 0), .month = m, .day = d };
+}
+
+/// Day of week of days since 2000-01-01: 0 = Monday ... 6 = Sunday.
+pub fn weekday(days: i32) u3 {
+    // 2000-01-01 was a Saturday.
+    return @intCast(@mod(@as(i64, days) + 5, 7));
+}
+
+/// Formats days since 2000-01-01 as "YYYY-MM-DD". Valid for years 0000-9999.
+pub fn formatPgDate(days: i32, buf: *[10]u8) []const u8 {
+    const c = toCivil(days);
     return std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2}", .{
-        @as(u64, @intCast(y)), @as(u64, @intCast(m)), @as(u64, @intCast(d)),
+        @as(u64, @intCast(c.year)), @as(u64, @intCast(c.month)), @as(u64, @intCast(c.day)),
     }) catch unreachable;
 }
 
@@ -59,6 +77,8 @@ pub fn todayPgDate(io: std.Io) i32 {
     const secs = std.Io.Clock.real.now(io).toSeconds();
     return @intCast(@divFloor(secs, 86400) - pg_epoch_offset_days);
 }
+
+pub const recurrence = @import("recurrence.zig");
 
 test "html date to postgres date" {
     try std.testing.expectEqual(@as(i32, 0), try parseHtmlDateToPgDate("2000-01-01"));
@@ -80,4 +100,14 @@ test "formatPgDate roundtrip" {
     while (d < 80000) : (d += 1) {
         try std.testing.expectEqual(d, try parseHtmlDateToPgDate(formatPgDate(d, &buf)));
     }
+}
+
+test "weekday" {
+    try std.testing.expectEqual(@as(u3, 5), weekday(0)); // 2000-01-01 Sat
+    try std.testing.expectEqual(@as(u3, 0), weekday(try parseHtmlDateToPgDate("2026-10-12"))); // Mon
+    try std.testing.expectEqual(@as(u3, 4), weekday(-1)); // 1999-12-31 Fri
+}
+
+test {
+    _ = recurrence;
 }

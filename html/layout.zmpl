@@ -6,6 +6,7 @@
 <meta name="htmx-config" content='{"includeIndicatorStyles":false,"historyCacheSize":0,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":true}]}'>
 <title>personal budget app</title>
 <link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/uPlot-1.6.31.min.css">
 <script src="/static/htmx-2.0.10.min.js"></script>
 </head>
 <body>

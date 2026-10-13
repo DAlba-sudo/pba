@@ -1,0 +1,23 @@
+meta {
+  name: Create Recurring Operations
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/operation/recurring
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  account_id: 1
+  amount: -12.43
+  title: Coffee
+  comment: Daily Work Java
+  date: 2026-10-12
+  draft: false
+  repeat: weekly
+  until: 2026-10-25
+  weekdays: mon,thu
+}

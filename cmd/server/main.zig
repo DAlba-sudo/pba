@@ -19,7 +19,7 @@ pub fn main(init: process.Init) !void {
     var server = try internal.routes.Server.init(io, allocator, .{
         .address = configuration.Server.InterfaceFunc(configuration.Server.Port),
         .request = .{
-            .max_form_count = 16,
+            .max_form_count = 256,
         },
     }, internal.routes.App{
         .p = pool,
@@ -40,8 +40,11 @@ pub fn main(init: process.Init) !void {
     router.post("/api/operation", api.Operation.Create, .{});
     router.delete("/api/operation", api.Operation.Delete, .{});
     router.get("/api/operation/search", api.Operation.Search, .{});
+    router.post("/api/operation/draft", api.Operation.Draft, .{});
+    router.post("/api/operation/recurring", api.Operation.Recurring, .{});
 
     router.get("/api/money/total", api.Money.Total, .{});
+    router.get("/api/money/series", api.Money.Series, .{});
 
     // HTMX UI: `/` is the only full page; `/ui/*` answer fragments.
     router.get("/", web.handlers_cards.index, .{});
@@ -49,12 +52,20 @@ pub fn main(init: process.Init) !void {
     router.get("/ui/cards/:id", web.handlers_cards.card, .{});
     router.get("/ui/cards/:id/ops", web.handlers_cards.cardOps, .{});
     router.delete("/ui/operations/:id", web.delete_handlers.operationDelete, .{});
+    router.post("/ui/cards/:id/operations/delete", web.delete_handlers.operationsDelete, .{});
+    router.post("/ui/cards/:id/operations/draft", web.delete_handlers.operationsDraft, .{});
+    router.post("/ui/cards/:id/operations/move", web.move_handlers.operationsMove, .{});
+    router.post("/ui/operations/:id/draft", web.delete_handlers.operationDraft, .{});
     router.delete("/ui/accounts/:id", web.delete_handlers.accountDelete, .{});
     router.get("/ui/accounts/new", web.account_forms.accountNew, .{});
     router.post("/ui/accounts", web.account_forms.accountCreate, .{});
     router.get("/ui/modal/close", web.account_forms.modalClose, .{});
     router.get("/ui/operations/new", web.operation_forms.operationNew, .{});
     router.post("/ui/operations", web.operation_forms.operationCreate, .{});
+    router.get("/export/operations.csv", web.export_csv.operationsCsv, .{});
+    router.get(web.static.uplot_js_path, web.static.uplotJs, .{});
+    router.get(web.static.uplot_css_path, web.static.uplotCss, .{});
+    router.get(web.static.graph_js_path, web.static.graphJs, .{});
     router.get(web.static.htmx_path, web.static.htmxJs, .{});
     router.get(web.static.css_path, web.static.appCss, .{});
 
@@ -65,6 +76,17 @@ pub fn main(init: process.Init) !void {
 // so it can setup the postgres pool.
 fn init_database(c: config.Configuration) !void {
     if (c.Database) |db| {
+        const tls: pg.Conn.Opts.TLS = switch (db.SslMode) {
+            .disable => .off,
+            .require => .require,
+            .@"verify-full" => .{ .verify_full = db.SslRootCert },
+        };
+        // Never fall back to plaintext when TLS was asked for.
+        if (tls != .off and !build_options.tls) {
+            std.log.err("PBA_DATABASE_SSLMODE={s} needs TLS support; rebuild with -Dtls=true", .{@tagName(db.SslMode)});
+            return error.TlsNotBuilt;
+        }
+
         pool = pg.Pool.init(io, allocator, .{
             .size = db.Pool.size,
             .timeout = db.Pool.timeout,
@@ -76,8 +98,14 @@ fn init_database(c: config.Configuration) !void {
             .connect = .{
                 .host = db.Host,
                 .port = db.Port,
+                .tls = tls,
             },
         }) catch |err| {
+            // Pool.init connects eagerly, so TLS failures surface here.
+            if (tls != .off) {
+                std.log.err("failed to initialize database (sslmode: {s}, err: {s})", .{ @tagName(db.SslMode), @errorName(err) });
+                return err;
+            }
             std.log.err("failed to initialize database with given information, proceeding without database (err: {s})", .{@errorName(err)});
             return;
         };
@@ -88,6 +116,7 @@ fn init_database(c: config.Configuration) !void {
 
         _ = try _pool.exec(internal.types.Account.DEF, .{});
         _ = try _pool.exec(internal.types.Operation.DEF, .{});
+        _ = try _pool.exec(internal.types.Operation.MIGRATE_DRAFT, .{});
     }
 }
 
@@ -96,8 +125,13 @@ const process = std.process;
 const config = @import("config.zig");
 const httpz = @import("httpz");
 const pg = @import("pg");
+const build_options = @import("build_options");
 
 const internal = @import("internal");
 const routes = internal.routes;
 const api = routes.api;
 const web = internal.web;
+
+test {
+    _ = config;
+}

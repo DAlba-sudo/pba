@@ -28,6 +28,12 @@ pub fn health(_: App, _: *httpz.Request, res: *httpz.Response) !void {
     res.setStatus(.ok);
 }
 
+// Responds `{"err": msg}` with `status`.
+pub fn jsonError(res: *httpz.Response, status: std.http.Status, msg: []const u8) !void {
+    res.setStatus(status);
+    try res.json(.{ .err = msg }, .{});
+}
+
 const Payload = union(enum) {
     int: ?i32,
     float: ?f32,

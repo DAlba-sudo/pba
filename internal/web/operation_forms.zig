@@ -21,20 +21,22 @@ pub fn operationNew(app: App, req: *httpz.Request, res: *httpz.Response) !void {
     const acc = account orelse return render.flash(res, .not_found, "Account not found.");
 
     var buf: [10]u8 = undefined;
-    const view: FormView = .{
-        .account_id = raw,
-        .account_name = acc.name,
-        .date = time.formatPgDate(time.todayPgDate(app.io), &buf),
-    };
+    var view = FormView.operation(res.arena, .{}) catch
+        return render.flash(res, .internal_server_error, "Could not render form.");
+    view.account_id = raw;
+    view.account_name = acc.name;
+    view.date = time.formatPgDate(time.todayPgDate(app.io), &buf);
     view.send(app, res, template, .ok);
 }
 
-/// POST /ui/operations: 200 empty + `HX-Trigger: {"pba:operation-saved":{"account_id":N}}`,
+/// POST /ui/operations: one operation, or one per series date when `repeat` is
+/// weekly/monthly (all or none). 200 empty + `HX-Trigger: {"pba:operation-saved":{"account_id":N}}`,
 /// or 422 with the re-rendered form (also for unknown or deleted accounts).
 pub fn operationCreate(app: App, req: *httpz.Request, res: *httpz.Response) !void {
     const p = app.p orelse return render.flash(res, .service_unavailable, "Database not connected.");
     const map = req.formData() catch return render.flash(res, .bad_request, "Invalid form data.");
-    var r = forms.validateOperation(map, time.todayPgDate(app.io));
+    var r = forms.validateOperation(res.arena, map, time.todayPgDate(app.io)) catch
+        return render.flash(res, .internal_server_error, "Could not save the operation.");
 
     var account_name: []const u8 = "";
     if (r.err_account_id == null) {
@@ -42,16 +44,30 @@ pub fn operationCreate(app: App, req: *httpz.Request, res: *httpz.Response) !voi
             return render.flash(res, .internal_server_error, "Could not load the account.");
         if (account) |a| account_name = a.name else r.err_account_id = "Account not found.";
     }
-    if (!r.ok()) {
-        var view = FormView.fromResult(r);
-        view.account_name = account_name;
-        return view.send(app, res, template, .unprocessable_entity);
-    }
+    if (!r.ok()) return sendInvalid(app, res, r, account_name);
 
     // Built from the integer only, so no JSON escaping is needed.
     const trigger = std.fmt.allocPrint(res.arena, "{{\"pba:operation-saved\":{{\"account_id\":{d}}}}}", .{r.account_id}) catch
         return render.flash(res, .internal_server_error, "Could not save the operation.");
-    _ = types.Operation.create(p, res.arena, r.amount, r.date, r.input.title, r.comment, r.account_id) catch
-        return render.flash(res, .internal_server_error, "Could not save the operation.");
+    const Op = types.Operation;
+    if (r.days.len == 0) {
+        _ = Op.create(p, res.arena, r.amount, r.date, r.input.title, r.comment, r.account_id, r.draft) catch
+            return render.flash(res, .internal_server_error, "Could not save the operation.");
+    } else {
+        const created = Op.create_many(p, res.arena, r.amount, r.days, r.input.title, r.comment, r.account_id, r.draft) catch
+            return render.flash(res, .internal_server_error, "Could not save the operations.");
+        if (created == null) {
+            // The account was deleted after the check above.
+            r.err_account_id = "Account not found.";
+            return sendInvalid(app, res, r, account_name);
+        }
+    }
     res.header("HX-Trigger", trigger);
+}
+
+fn sendInvalid(app: App, res: *httpz.Response, r: forms.Result, account_name: []const u8) void {
+    var view = FormView.operation(res.arena, r) catch
+        return render.flash(res, .internal_server_error, "Could not render form.");
+    view.account_name = account_name;
+    view.send(app, res, template, .unprocessable_entity);
 }
