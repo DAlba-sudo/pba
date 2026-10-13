@@ -24,31 +24,61 @@ pub fn operationDelete(app: App, req: *httpz.Request, res: *httpz.Response) !voi
     cards.renderCardFragment(app, res, account_id, f, oq);
 }
 
-/// Most operations one bulk request may delete (bounds `max_form_count`).
+/// Most operations one bulk request may change (bounds `max_form_count`).
 const max_bulk = 200;
+
+/// POST body of a card bulk action on `/ui/cards/:id/operations/...`.
+pub const BulkForm = struct {
+    account_id: i32,
+    map: *const forms.StringKeyValue,
+    /// Checked `sel` operation ids (1..max_bulk).
+    ids: []const i32,
+    f: forms.Filters,
+    oq: []const u8,
+};
+
+/// Parses a bulk action form; on bad input answers a flash and returns null.
+pub fn bulkForm(app: App, req: *httpz.Request, res: *httpz.Response) ?BulkForm {
+    const account_id = cards.pathId(req) orelse return answered(notFound(res, "Account"));
+    const map = req.formData() catch return answered(render.flash(res, .bad_request, "Invalid form data."));
+    const f = forms.Filters.fromMap(res.arena, map, time.todayPgDate(app.io)) catch |err|
+        return answered(cards.fail(res, "parse filters", err));
+    const collected = forms.collectIds(res.arena, map, "sel", max_bulk) catch |err|
+        return answered(cards.fail(res, "collect ids", err));
+    const ids = switch (collected) {
+        .ok => |ids| ids,
+        .invalid_id => return answered(render.flash(res, .bad_request, "Invalid operation id.")),
+        .too_many => return answered(render.flash(res, .bad_request, "Too many operations selected.")),
+        .none => return answered(render.flash(res, .bad_request, "No operations selected.")),
+    };
+    return .{
+        .account_id = account_id,
+        .map = map,
+        .ids = ids,
+        .f = f,
+        .oq = std.mem.trim(u8, map.get("oq") orelse "", " \t\r\n"),
+    };
+}
 
 /// POST /ui/cards/:id/operations/delete (form `sel`=<operation id>, repeated,
 /// plus filters and `oq`): soft-deletes the selected operations of that
 /// account and re-renders its card. Ids from other accounts are ignored.
 pub fn operationsDelete(app: App, req: *httpz.Request, res: *httpz.Response) !void {
     const p = app.p orelse return cards.noDatabase(res);
-    const account_id = cards.pathId(req) orelse return notFound(res, "Account");
-    const map = req.formData() catch return render.flash(res, .bad_request, "Invalid form data.");
-    const f = forms.Filters.fromMap(res.arena, map, time.todayPgDate(app.io)) catch |err| return cards.fail(res, "parse filters", err);
-    const oq = std.mem.trim(u8, map.get("oq") orelse "", " \t\r\n");
+    const b = bulkForm(app, req, res) orelse return;
+    _ = types.Operation.delete_live_many(p, b.account_id, b.ids) catch |err| return cards.fail(res, "delete operations", err);
+    cards.renderCardFragment(app, res, b.account_id, b.f, b.oq);
+}
 
-    var ids: std.ArrayList(i32) = .empty;
-    var it = map.iterator();
-    while (it.next()) |kv| {
-        if (!std.mem.eql(u8, kv.key, "sel")) continue;
-        const id = forms.parseId(kv.value) orelse return render.flash(res, .bad_request, "Invalid operation id.");
-        if (ids.items.len == max_bulk) return render.flash(res, .bad_request, "Too many operations selected.");
-        ids.append(res.arena, id) catch |err| return cards.fail(res, "collect ids", err);
-    }
-    if (ids.items.len == 0) return render.flash(res, .bad_request, "No operations selected.");
-
-    _ = types.Operation.delete_live_many(p, account_id, ids.items) catch |err| return cards.fail(res, "delete operations", err);
-    cards.renderCardFragment(app, res, account_id, f, oq);
+/// POST /ui/cards/:id/operations/draft (like `operationsDelete`, plus
+/// `draft`=true|false): sets the flag on the selected operations.
+pub fn operationsDraft(app: App, req: *httpz.Request, res: *httpz.Response) !void {
+    const p = app.p orelse return cards.noDatabase(res);
+    const b = bulkForm(app, req, res) orelse return;
+    const draft = types.Operation.parseDraft(b.map.get("draft") orelse "") orelse
+        return render.flash(res, .bad_request, "Invalid draft flag.");
+    _ = types.Operation.set_draft_many(p, b.account_id, b.ids, draft) catch |err| return cards.fail(res, "set draft", err);
+    cards.renderCardFragment(app, res, b.account_id, b.f, b.oq);
 }
 
 /// POST /ui/operations/:id/draft (form `draft`=true|false, filters, `oq`):
@@ -84,6 +114,11 @@ pub fn accountDelete(app: App, req: *httpz.Request, res: *httpz.Response) !void 
         res.header("HX-Push-Url", url);
     }
     cards.renderDashboardFragment(app, res, f);
+}
+
+/// The response is already written: no form.
+fn answered(_: void) ?BulkForm {
+    return null;
 }
 
 fn notFound(res: *httpz.Response, comptime what: []const u8) void {

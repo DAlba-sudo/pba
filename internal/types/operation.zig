@@ -267,6 +267,21 @@ pub const Operation = struct {
         return null;
     }
 
+    // Sets `draft` on the live operations in `ids` that belong to `account_id`
+    // (other ids are ignored). Returns how many were updated.
+    pub fn set_draft_many(p: *pg.Pool, account_id: i32, ids: []const i32, draft: bool) Errors!usize {
+        const query =
+            \\ UPDATE operation SET draft = $3, updated_at = CURRENT_TIMESTAMP
+            \\ WHERE account_id = $1 AND id = ANY($2) AND deleted_at IS NULL;
+        ;
+
+        const affected = p.exec(query, .{ account_id, ids, draft }) catch |err| {
+            std.log.err("failed to set draft on {d} operations of account {d} (err: {s})", .{ ids.len, account_id, @errorName(err) });
+            return Errors.OperationUpdateFailure;
+        };
+        return @intCast(affected orelse 0);
+    }
+
     // Parses a `draft` form value: "true" or "false", else null.
     pub fn parseDraft(s: []const u8) ?bool {
         if (std.mem.eql(u8, s, "true")) return true;

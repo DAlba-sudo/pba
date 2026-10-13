@@ -40,6 +40,22 @@ pub fn parseId(s: []const u8) ?i32 {
     return if (v > 0) v else null;
 }
 
+pub const CollectResult = union(enum) { ok: []const i32, invalid_id, too_many, none };
+
+/// Every `name` value of `map` as an id (in `arena`), in form order. Stops at
+/// the first invalid id or past `max` values.
+pub fn collectIds(arena: std.mem.Allocator, map: *const StringKeyValue, name: []const u8, max: usize) !CollectResult {
+    var ids: std.ArrayList(i32) = .empty;
+    var it = map.iterator();
+    while (it.next()) |kv| {
+        if (!std.mem.eql(u8, kv.key, name)) continue;
+        const id = parseId(kv.value) orelse return .invalid_id;
+        if (ids.items.len == max) return .too_many;
+        try ids.append(arena, id);
+    }
+    return if (ids.items.len == 0) .none else .{ .ok = ids.items };
+}
+
 /// "YYYY-MM-DD" (years 0000-9999) to days since 2000-01-01, else null.
 pub fn parseDate(s: []const u8) ?i32 {
     if (s.len != 10) return null;
@@ -289,6 +305,22 @@ test "parseAmount" {
     for ([_][]const u8{ "abc", "nan", "inf", "", "1e13", "0x10", "1_0" }) |s| {
         try testing.expectError(error.InvalidAmount, parseAmount(s));
     }
+}
+
+test "collectIds" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var ok = try testMap(&.{ .{ "sel", "3" }, .{ "oq", "x" }, .{ "sel", "1" } });
+    defer ok.deinit(testing.allocator);
+    try testing.expectEqualSlices(i32, &.{ 3, 1 }, (try collectIds(a, &ok, "sel", 2)).ok);
+    try testing.expectEqual(CollectResult.too_many, try collectIds(a, &ok, "sel", 1));
+    try testing.expectEqual(CollectResult.none, try collectIds(a, &ok, "nope", 2));
+
+    var bad = try testMap(&.{ .{ "sel", "1" }, .{ "sel", "0" } });
+    defer bad.deinit(testing.allocator);
+    try testing.expectEqual(CollectResult.invalid_id, try collectIds(a, &bad, "sel", 5));
 }
 
 test "Filters" {
